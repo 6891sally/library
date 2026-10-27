@@ -60,6 +60,7 @@
 
     <!-- 1. 학생 홈 -->
     <div id="view-student-home" class="max-w-lg mx-auto mt-4 sm:mt-10 space-y-4">
+      <div id="connection-error" class="hidden bg-red-50 border-2 border-red-300 text-red-800 rounded-2xl p-4 text-sm"></div>
       <div class="grid grid-cols-2 gap-4">
         <button onclick="app.startBorrowScan()" class="btn-bounce bg-blue-500 hover:bg-blue-600 text-white rounded-3xl p-6 sm:p-10 shadow-lg flex flex-col items-center gap-3">
           <div class="bg-white/20 p-4 rounded-full"><i class="fa-solid fa-book-medical text-4xl sm:text-5xl"></i></div>
@@ -506,8 +507,17 @@
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({ fn: functionName, args: args })
         })
-          .then(r => { if (!r.ok) throw new Error('서버 응답 오류 ' + r.status); return r.json(); })
-          .then(res => { if (!res.ok) throw new Error(res.error || '서버 오류'); return res.result; });
+          .catch(() => { throw new Error('[연결 실패] Apps Script 주소에 닿지 못했어요. 인터넷 연결과 API_URL 주소를 확인해 주세요.'); })
+          .then(r => r.text().then(text => {
+            let res;
+            try { res = JSON.parse(text); }
+            catch (e) {
+              // JSON 대신 웹페이지가 오면: 로그인 화면이거나, doPost가 없는 옛 버전이 배포된 경우
+              throw new Error('[배포 확인] Apps Script가 기록 대신 웹페이지를 보냈어요. ①Code.gs 저장 후 배포 관리→수정→새 버전으로 배포했는지 ②액세스 권한이 "모든 사용자"인지 확인해 주세요.');
+            }
+            if (!res.ok) throw new Error('[서버 오류] ' + (res.error || '알 수 없는 오류'));
+            return res.result;
+          }));
       }
       return new Promise(resolve => {
         let name = functionName, a = args;
@@ -617,7 +627,16 @@
               document.getElementById('admin-current-class-label').innerText = '현재 학급 없음';
             }
           })
-          .catch(err => this.showToast('데이터를 불러오지 못했습니다. ' + (err && err.message ? err.message : ''), true));
+          .catch(err => this.showConnectionError(err));
+      },
+
+      showConnectionError: function(err) {
+        const box = document.getElementById('connection-error');
+        const shown = API_URL.length > 60 ? API_URL.slice(0, 45) + '…' + API_URL.slice(-12) : API_URL;
+        box.innerHTML = `<p class="font-black text-base mb-1"><i class="fa-solid fa-plug-circle-xmark mr-1"></i>기록 저장소(Apps Script)와 연결되지 않았어요</p>
+          <p class="mb-2">${this.esc(err && err.message ? err.message : String(err))}</p>
+          <p class="text-xs text-red-600 break-all">지금 넣은 주소: ${this.esc(shown)}</p>`;
+        box.classList.remove('hidden');
       },
 
       // ── QR로 열렸을 때 (주소 끝의 ?book=B001-1 읽기) ──
@@ -741,7 +760,7 @@
               body.innerHTML = `<p class="text-center text-lg font-bold text-gray-600 py-6">이 책은 지금 빌릴 수 없어요. 선생님께 말씀드려요.</p>`;
             }
           })
-          .catch(() => { document.getElementById('scan-body').innerHTML = '<div class="text-center py-8 text-red-500">책 정보를 불러오지 못했어요. 다시 찍어 보세요.</div>'; });
+          .catch(err => { document.getElementById('scan-body').innerHTML = `<div class="text-center py-8 text-red-500 px-2"><p class="font-bold mb-2">책 정보를 불러오지 못했어요.</p><p class="text-sm text-gray-600">${this.esc(err && err.message)}</p></div>`; });
       },
 
       finishScan: function() {
@@ -1002,7 +1021,7 @@
                 </div>`;
             }).join('');
           })
-          .catch(() => { container.innerHTML = '<div class="text-center py-10 text-red-500">검색 중 오류가 발생했습니다.</div>'; });
+          .catch(err => { container.innerHTML = `<div class="text-center py-10 text-red-500 px-4"><p class="font-bold mb-2">책 목록을 불러오지 못했어요.</p><p class="text-sm text-gray-600">${this.esc(err && err.message)}</p></div>`; });
       },
 
       loadMyBooks: function(student) {
