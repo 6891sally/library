@@ -150,7 +150,7 @@
         <button onclick="app.showView('student-home')" class="text-gray-500 hover:text-gray-800"><i class="fa-solid fa-xmark text-2xl"></i></button>
       </div>
       <div class="flex gap-2 mb-4 flex-shrink-0">
-        <input type="text" id="search-input" placeholder="제목이나 저자를 입력하세요" class="flex-1 p-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none text-lg" onkeypress="if(event.key === 'Enter') app.doSearch()">
+        <input type="text" id="search-input" placeholder="제목이나 저자로 찾기" class="flex-1 p-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none text-lg" onkeypress="if(event.key === 'Enter') app.doSearch()">
         <button onclick="app.doSearch()" class="bg-purple-600 text-white px-6 rounded-xl font-bold hover:bg-purple-700">검색</button>
       </div>
       <div id="search-results" class="flex-1 overflow-y-auto space-y-3 pb-4"></div>
@@ -493,7 +493,7 @@
     const SEARCH_PLACEHOLDER = '<div class="text-center text-gray-400 mt-10"><i class="fa-solid fa-magnifying-glass text-4xl mb-3"></i><br>검색어를 입력해주세요.</div>';
 
     // ▼▼▼ 여기에 Apps Script 웹앱 주소(…/exec)를 붙여넣으세요 ▼▼▼
-    const API_URL = 'https://script.google.com/macros/s/AKfycbyMCuzA7lXzKteoM4RGdnAb5jeWoQ221_n3pYkBOGE_sK2j5fzt3jG9dA9NsxHJFyzp/exec';
+    const API_URL = 'https://script.google.com/macros/s/AKfycbyMCuzA7lXzKteoM4RGdnAb5jeWoQ221_n3pYkBOGE_sK2j5fzt3jG9dA9NsxHJFyzp/execE';
     // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
 
     const USE_MOCK = !/^https:\/\/script\.google\.com\//.test(API_URL);
@@ -812,8 +812,7 @@
         }
         if (viewId === 'student-search') {
           document.getElementById('search-input').value = '';
-          document.getElementById('search-results').innerHTML = SEARCH_PLACEHOLDER;
-          setTimeout(() => document.getElementById('search-input').focus(), 100);
+          this.doSearch();
         }
         if (viewId === 'student-stats') this.loadStats('month');
       },
@@ -970,21 +969,24 @@
 
       doSearch: function() {
         const q = document.getElementById('search-input').value.trim();
-        if (q.length < 2) return this.showToast('2글자 이상 입력하세요.', true);
+        if (q.length === 1) return this.showToast('2글자 이상 입력하세요.', true);
         const container = document.getElementById('search-results');
-        container.innerHTML = '<div class="text-center py-4 text-gray-500">검색 중...</div>';
+        container.innerHTML = `<div class="text-center py-4 text-gray-500">${q ? '검색 중...' : '책 목록을 불러오는 중...'}</div>`;
         callServer('searchBooks', q)
           .then(res => {
             if (res.length === 0) {
-              container.innerHTML = '<div class="text-center py-10 text-gray-500">검색 결과가 없습니다.</div>';
+              container.innerHTML = `<div class="text-center py-10 text-gray-500">${q ? '검색 결과가 없습니다.' : '아직 등록된 책이 없어요.'}</div>`;
               return;
             }
-            container.innerHTML = res.map(b => {
+            const head = q
+              ? `<div class="flex justify-between items-center text-sm text-gray-500 px-1"><span>'${this.esc(q)}' 검색 결과 ${res.length}권</span><button onclick="document.getElementById('search-input').value=''; app.doSearch()" class="underline">전체 보기</button></div>`
+              : `<div class="text-sm text-gray-500 px-1">우리반 책 전체 ${res.length}종 · 가나다순</div>`;
+            container.innerHTML = head + res.map(b => {
               const statusTag = b.available > 0
                 ? `<span class="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-bold"><i class="fa-solid fa-circle-check mr-1"></i>대출가능 ${b.available}권</span>`
                 : `<span class="bg-red-100 text-red-700 px-2 py-1 rounded text-xs font-bold"><i class="fa-solid fa-circle-xmark mr-1"></i>모두 대출중</span>`;
               const coverImg = b.cover
-                ? `<img src="${this.esc(b.cover)}" class="w-16 h-24 object-cover rounded shadow border">`
+                ? `<img src="${this.esc(b.cover)}" loading="lazy" class="w-16 h-24 object-cover rounded shadow border">`
                 : `<div class="w-16 h-24 bg-gray-200 rounded flex items-center justify-center text-gray-400"><i class="fa-solid fa-book text-2xl"></i></div>`;
               return `
                 <div class="flex gap-4 p-4 border rounded-xl bg-white shadow-sm">
