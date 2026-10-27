@@ -1,0 +1,1697 @@
+<!DOCTYPE html>
+<html lang="ko">
+<!--
+  우리반 도서관 - GitHub Pages용 화면
+  ▶ 아래 <script> 안의 API_URL 한 줄에 Apps Script 웹앱 주소(…/exec)를 붙여넣으세요.
+-->
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>학급 도서관 관리</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+  <script>window.qrcode || document.write('<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"><\/script>');</script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap');
+    body { font-family: 'Noto Sans KR', 'Malgun Gothic', sans-serif; background-color: #f0fdf4; -webkit-tap-highlight-color: transparent; }
+    .btn-bounce { transition: transform 0.1s; }
+    .btn-bounce:active { transform: scale(0.95); }
+    .hidden { display: none !important; }
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+
+    /* ── 라벨 인쇄 (A4 3×8 = 24칸 라벨지 기준, 칸 크기 63.5 × 33.9mm) ── */
+    #print-area { display: none; }
+    @media print {
+      @page { size: A4; margin: 12.9mm 7.2mm; }
+      html, body { background: #fff !important; height: auto !important; overflow: visible !important; display: block !important; }
+      body > *:not(#print-area) { display: none !important; }
+      #print-area { display: grid !important; grid-template-columns: repeat(3, 63.5mm); grid-auto-rows: 33.9mm; column-gap: 2.5mm; }
+      .label { box-sizing: border-box; padding: 2mm 3mm; display: flex; flex-direction: row; align-items: center; gap: 2.5mm; overflow: hidden; break-inside: avoid; }
+      .label-qr { width: 28mm; height: 28mm; flex-shrink: 0; }
+      .label-qr svg { width: 100%; height: 100%; display: block; }
+      .label-text { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 1mm; }
+      .label-title { font-size: 8.5pt; font-weight: 700; line-height: 1.25; max-height: 3.8em; overflow: hidden; word-break: keep-all; }
+      .label-code { font-size: 15pt; font-weight: 900; font-family: monospace; letter-spacing: -0.3pt; }
+      .label-foot { font-size: 6pt; color: #555; }
+      .print-guides .label { outline: 0.2mm dashed #bbb; }
+    }
+  </style>
+</head>
+<body class="text-gray-800 h-screen flex flex-col overflow-hidden">
+
+  <header class="bg-green-600 text-white shadow-md relative z-10 flex-shrink-0">
+    <div class="max-w-5xl mx-auto px-4 py-3 flex justify-between items-center">
+      <div class="flex items-center gap-2 cursor-pointer" onclick="app.showView('student-home')">
+        <i class="fa-solid fa-book-open text-2xl"></i>
+        <h1 class="text-xl font-bold tracking-tight" id="header-class-name">우리반 도서관</h1>
+      </div>
+      <button onclick="app.showTeacherLogin()" class="text-green-200 hover:text-white p-2 rounded-full focus:outline-none" aria-label="교사 관리">
+        <i class="fa-solid fa-gear text-lg"></i>
+      </button>
+    </div>
+  </header>
+
+  <main class="flex-1 overflow-y-auto relative p-4" id="main-container">
+
+    <!-- 1. 학생 홈 -->
+    <div id="view-student-home" class="max-w-lg mx-auto mt-4 sm:mt-10 space-y-4">
+      <div class="grid grid-cols-2 gap-4">
+        <button onclick="app.startBorrowScan()" class="btn-bounce bg-blue-500 hover:bg-blue-600 text-white rounded-3xl p-6 sm:p-10 shadow-lg flex flex-col items-center gap-3">
+          <div class="bg-white/20 p-4 rounded-full"><i class="fa-solid fa-book-medical text-4xl sm:text-5xl"></i></div>
+          <span class="text-xl sm:text-2xl font-bold">책 빌리기</span>
+        </button>
+        <button onclick="app.showView('student-mybooks-1')" class="btn-bounce bg-orange-500 hover:bg-orange-600 text-white rounded-3xl p-6 sm:p-10 shadow-lg flex flex-col items-center gap-3">
+          <div class="bg-white/20 p-4 rounded-full"><i class="fa-solid fa-right-left text-4xl sm:text-5xl"></i></div>
+          <span class="text-xl sm:text-2xl font-bold">책 반납하기</span>
+        </button>
+        <button onclick="app.showView('student-search')" class="btn-bounce bg-purple-500 hover:bg-purple-600 text-white rounded-3xl p-6 sm:p-10 shadow-lg flex flex-col items-center gap-3">
+          <div class="bg-white/20 p-4 rounded-full"><i class="fa-solid fa-magnifying-glass text-4xl sm:text-5xl"></i></div>
+          <span class="text-xl sm:text-2xl font-bold">책 찾기</span>
+        </button>
+        <button onclick="app.showView('student-mybooks-1')" class="btn-bounce bg-green-500 hover:bg-green-600 text-white rounded-3xl p-6 sm:p-10 shadow-lg flex flex-col items-center gap-3">
+          <div class="bg-white/20 p-4 rounded-full"><i class="fa-solid fa-hand-holding-hand text-4xl sm:text-5xl"></i></div>
+          <span class="text-xl sm:text-2xl font-bold">내가 빌린 책</span>
+        </button>
+      </div>
+      <button id="home-stats-btn" onclick="app.showView('student-stats')" class="btn-bounce w-full bg-yellow-400 hover:bg-yellow-500 text-yellow-900 rounded-3xl p-5 shadow-lg flex items-center justify-center gap-3">
+        <i class="fa-solid fa-crown text-3xl"></i>
+        <span class="text-xl sm:text-2xl font-bold">우리반 독서 기록</span>
+      </button>
+      <p class="text-center text-gray-500 text-sm">한 사람당 <b class="max-loans-text">2</b>권까지, <b class="loan-days-text">7</b>일 동안 빌릴 수 있어요.</p>
+    </div>
+
+    <!-- 2-0. 빌리기 안내 (QR 찍기) -->
+    <div id="view-student-borrow-guide" class="hidden max-w-lg mx-auto bg-white rounded-2xl shadow-xl p-6 text-center border border-gray-100">
+      <div class="flex justify-end">
+        <button onclick="app.showView('student-home')" class="text-gray-500 hover:text-gray-800"><i class="fa-solid fa-xmark text-2xl"></i></button>
+      </div>
+      <div class="text-7xl text-blue-500 mb-4"><i class="fa-solid fa-qrcode"></i></div>
+      <h2 class="text-2xl font-black mb-3">책에 붙은 QR코드를 찍어요</h2>
+      <ol class="text-left text-lg space-y-2 bg-blue-50 rounded-xl p-4 mb-6">
+        <li><b>1.</b> 태블릿의 <b>카메라</b> 앱을 열어요.</li>
+        <li><b>2.</b> 책 뒤에 붙은 <b>QR코드</b>를 화면에 비춰요.</li>
+        <li><b>3.</b> 화면에 뜬 <b>링크</b>를 눌러요.</li>
+        <li><b>4.</b> 내 이름을 누르면 끝!</li>
+      </ol>
+      <button onclick="app.showView('student-borrow-1')" class="text-sm text-gray-500 underline">QR코드가 안 찍혀요 (번호로 빌리기)</button>
+    </div>
+
+    <!-- 2-1. QR로 열린 책 -->
+    <div id="view-student-scan" class="hidden max-w-lg mx-auto bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+      <div class="flex justify-end">
+        <button onclick="app.finishScan()" class="text-gray-500 hover:text-gray-800"><i class="fa-solid fa-xmark text-2xl"></i></button>
+      </div>
+      <div id="scan-book" class="flex gap-4 items-center mb-5"></div>
+      <div id="scan-body"></div>
+    </div>
+
+    <!-- 2. 대출 - 이름 선택 -->
+    <div id="view-student-borrow-1" class="hidden max-w-lg mx-auto bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+      <div class="flex justify-between items-center mb-6">
+        <h2 class="text-2xl font-bold text-gray-800"><i class="fa-solid fa-user text-blue-500 mr-2"></i>내 이름 선택</h2>
+        <button onclick="app.showView('student-home')" class="text-gray-500 hover:text-gray-800"><i class="fa-solid fa-xmark text-2xl"></i></button>
+      </div>
+      <div id="borrow-student-list" class="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[60vh] overflow-y-auto pr-2"></div>
+    </div>
+
+    <!-- 3. 대출 - 책 번호 입력 -->
+    <div id="view-student-borrow-2" class="hidden max-w-lg mx-auto bg-white rounded-2xl shadow-xl p-6 text-center border border-gray-100">
+      <div class="flex justify-between items-center mb-4">
+        <button onclick="app.showView('student-borrow-1')" class="text-gray-500"><i class="fa-solid fa-arrow-left text-xl"></i></button>
+        <h2 class="text-2xl font-bold text-gray-800"><i class="fa-solid fa-book text-blue-500 mr-2"></i>책 번호 입력</h2>
+        <button onclick="app.showView('student-home')" class="text-gray-500"><i class="fa-solid fa-xmark text-xl"></i></button>
+      </div>
+      <div class="bg-blue-50 text-blue-800 px-4 py-2 rounded-lg mb-6 inline-block font-bold" id="borrow-selected-student"></div>
+      <p class="text-gray-600 mb-4">책 라벨에 적힌 번호를 입력하세요.<br><span class="text-sm">(예: B001-1 · 최대 <b class="max-loans-text">2</b>권)</span></p>
+      <input type="text" id="borrow-book-code" placeholder="B001-1" lang="en" class="w-full text-center text-3xl p-4 border-2 border-blue-300 rounded-xl uppercase focus:outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100 mb-6" autocomplete="off" onkeypress="if(event.key === 'Enter') app.submitBorrow()">
+      <button id="borrow-submit-btn" onclick="app.submitBorrow()" class="btn-bounce w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xl py-4 rounded-xl shadow-md">대출하기</button>
+    </div>
+
+    <!-- 4. 반납 -->
+    <div id="view-student-return" class="hidden max-w-lg mx-auto bg-white rounded-2xl shadow-xl p-6 text-center border border-gray-100">
+      <div class="flex justify-between items-center mb-6">
+        <h2 class="text-2xl font-bold text-gray-800"><i class="fa-solid fa-book text-orange-500 mr-2"></i>책 반납하기</h2>
+        <button onclick="app.showView('student-home')" class="text-gray-500 hover:text-gray-800"><i class="fa-solid fa-xmark text-2xl"></i></button>
+      </div>
+      <p class="text-gray-600 mb-4">반납할 책의 바코드를 찍거나 번호를 입력하세요.</p>
+      <input type="text" id="return-book-code" placeholder="B001-1" lang="en" class="w-full text-center text-3xl p-4 border-2 border-orange-300 rounded-xl uppercase focus:outline-none focus:border-orange-600 focus:ring-4 focus:ring-orange-100 mb-6" autocomplete="off" onkeypress="if(event.key === 'Enter') app.submitReturn()">
+      <button id="return-submit-btn" onclick="app.submitReturn()" class="btn-bounce w-full bg-orange-600 hover:bg-orange-700 text-white font-bold text-xl py-4 rounded-xl shadow-md">반납하기</button>
+    </div>
+
+    <!-- 5. 책 찾기 -->
+    <div id="view-student-search" class="hidden max-w-2xl mx-auto bg-white rounded-2xl shadow-xl p-4 sm:p-6 border border-gray-100 h-full flex flex-col">
+      <div class="flex justify-between items-center mb-4 flex-shrink-0">
+        <h2 class="text-2xl font-bold text-gray-800"><i class="fa-solid fa-magnifying-glass text-purple-500 mr-2"></i>책 찾기</h2>
+        <button onclick="app.showView('student-home')" class="text-gray-500 hover:text-gray-800"><i class="fa-solid fa-xmark text-2xl"></i></button>
+      </div>
+      <div class="flex gap-2 mb-4 flex-shrink-0">
+        <input type="text" id="search-input" placeholder="제목이나 저자를 입력하세요" class="flex-1 p-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none text-lg" onkeypress="if(event.key === 'Enter') app.doSearch()">
+        <button onclick="app.doSearch()" class="bg-purple-600 text-white px-6 rounded-xl font-bold hover:bg-purple-700">검색</button>
+      </div>
+      <div id="search-results" class="flex-1 overflow-y-auto space-y-3 pb-4"></div>
+    </div>
+
+    <!-- 6. 내가 빌린 책 - 이름 선택 -->
+    <div id="view-student-mybooks-1" class="hidden max-w-lg mx-auto bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+      <div class="flex justify-between items-center mb-6">
+        <h2 class="text-2xl font-bold text-gray-800"><i class="fa-solid fa-user text-green-500 mr-2"></i>내 이름을 눌러요</h2>
+        <button onclick="app.showView('student-home')" class="text-gray-500 hover:text-gray-800"><i class="fa-solid fa-xmark text-2xl"></i></button>
+      </div>
+      <div id="mybooks-student-list" class="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[60vh] overflow-y-auto pr-2"></div>
+    </div>
+
+    <!-- 7. 내가 빌린 책 - 목록 -->
+    <div id="view-student-mybooks-2" class="hidden max-w-2xl mx-auto bg-white rounded-2xl shadow-xl p-4 sm:p-6 border border-gray-100 h-full flex flex-col">
+      <div class="flex justify-between items-center mb-4 flex-shrink-0">
+        <button onclick="app.showView('student-mybooks-1')" class="text-gray-500"><i class="fa-solid fa-arrow-left text-xl"></i></button>
+        <h2 class="text-xl sm:text-2xl font-bold text-gray-800" id="mybooks-title">내가 빌린 책</h2>
+        <button onclick="app.showView('student-home')" class="text-gray-500"><i class="fa-solid fa-xmark text-xl"></i></button>
+      </div>
+      <div id="mybooks-list" class="flex-1 overflow-y-auto space-y-3 pb-4"></div>
+      <button onclick="app.showView('student-return')" class="flex-shrink-0 text-sm text-gray-400 underline mt-2">목록에 없는 책 번호로 반납하기</button>
+    </div>
+
+    <!-- 8. 우리반 독서 기록 -->
+    <div id="view-student-stats" class="hidden max-w-2xl mx-auto bg-white rounded-2xl shadow-xl p-4 sm:p-6 border border-gray-100">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-2xl font-bold text-gray-800"><i class="fa-solid fa-crown text-yellow-500 mr-2"></i>우리반 독서 기록</h2>
+        <button onclick="app.showView('student-home')" class="text-gray-500 hover:text-gray-800"><i class="fa-solid fa-xmark text-2xl"></i></button>
+      </div>
+      <div class="flex gap-2 mb-5">
+        <button id="stats-period-month" onclick="app.loadStats('month')" class="stats-period-btn flex-1 py-2 rounded-xl font-bold">이번 달</button>
+        <button id="stats-period-all" onclick="app.loadStats('all')" class="stats-period-btn flex-1 py-2 rounded-xl font-bold">전체</button>
+      </div>
+      <div id="stats-content" class="space-y-6"></div>
+    </div>
+
+    <!-- 교사 로그인 모달 -->
+    <div id="modal-teacher-login" class="hidden absolute inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+      <div class="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl">
+        <h3 class="text-xl font-bold mb-4"><i class="fa-solid fa-gear mr-2"></i>교사 관리 로그인</h3>
+        <p class="text-sm text-gray-600 mb-4">비밀번호를 입력해주세요.</p>
+        <input type="password" id="teacher-pw" class="w-full p-3 border rounded-lg mb-4 text-center text-xl" onkeypress="if(event.key === 'Enter') app.loginTeacher()">
+        <div class="flex gap-2">
+          <button onclick="document.getElementById('modal-teacher-login').classList.add('hidden')" class="flex-1 bg-gray-200 text-gray-800 py-3 rounded-lg font-bold">취소</button>
+          <button onclick="app.loginTeacher()" class="flex-1 bg-green-600 text-white py-3 rounded-lg font-bold">확인</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 9. 교사 관리 화면 -->
+    <div id="view-teacher-admin" class="hidden h-full flex flex-col md:flex-row gap-4 max-w-6xl mx-auto">
+
+      <div class="w-full md:w-64 bg-white rounded-2xl shadow-sm border border-gray-200 p-4 flex-shrink-0 flex md:flex-col gap-2 overflow-x-auto md:overflow-visible">
+        <div class="hidden md:block mb-4 p-2 border-b">
+          <h2 class="font-bold text-lg text-gray-700">관리자 메뉴</h2>
+          <p class="text-xs text-gray-500" id="admin-current-class-label">학급 로딩중...</p>
+        </div>
+        <button onclick="app.showAdminTab('dashboard')" id="tab-btn-dashboard" class="admin-tab-btn flex-shrink-0 flex items-center gap-2 p-3 rounded-xl bg-green-50 text-green-700 font-bold transition">
+          <i class="fa-solid fa-chart-pie w-5"></i> 대시보드
+        </button>
+        <button onclick="app.showAdminTab('books')" id="tab-btn-books" class="admin-tab-btn flex-shrink-0 flex items-center gap-2 p-3 rounded-xl hover:bg-gray-50 text-gray-600 font-medium transition">
+          <i class="fa-solid fa-book w-5"></i> 도서 관리
+        </button>
+        <button onclick="app.showAdminTab('students')" id="tab-btn-students" class="admin-tab-btn flex-shrink-0 flex items-center gap-2 p-3 rounded-xl hover:bg-gray-50 text-gray-600 font-medium transition">
+          <i class="fa-solid fa-users w-5"></i> 학생 관리
+        </button>
+        <button onclick="app.showAdminTab('classes')" id="tab-btn-classes" class="admin-tab-btn flex-shrink-0 flex items-center gap-2 p-3 rounded-xl hover:bg-gray-50 text-gray-600 font-medium transition">
+          <i class="fa-solid fa-school w-5"></i> 학급 관리
+        </button>
+        <button onclick="app.logoutTeacher()" class="mt-auto flex-shrink-0 flex items-center gap-2 p-3 rounded-xl bg-gray-800 text-white font-medium hover:bg-gray-700 transition">
+          <i class="fa-solid fa-right-from-bracket w-5"></i> 학생 화면으로
+        </button>
+      </div>
+
+      <div class="flex-1 bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-6 overflow-y-auto relative">
+
+        <div id="admin-loading" class="hidden absolute inset-0 bg-white/80 z-10 flex items-center justify-center backdrop-blur-sm">
+          <div class="animate-spin rounded-full h-12 w-12 border-4 border-green-500 border-t-transparent"></div>
+        </div>
+
+        <!-- 탭: 대시보드 -->
+        <div id="tab-dashboard" class="admin-tab-content space-y-6">
+          <h2 class="text-2xl font-bold mb-4"><i class="fa-solid fa-chart-pie text-green-600 mr-2"></i>대시보드 <span class="text-sm font-normal text-gray-500 ml-2">현재 학급 기준</span></h2>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="bg-gray-50 p-4 rounded-xl border border-gray-100">
+              <div class="text-gray-500 text-sm font-bold mb-1">전체 도서</div>
+              <div class="text-3xl font-black text-gray-800" id="dash-total">0</div>
+            </div>
+            <div class="bg-green-50 p-4 rounded-xl border border-green-100">
+              <div class="text-green-600 text-sm font-bold mb-1">대출 가능</div>
+              <div class="text-3xl font-black text-green-700" id="dash-available">0</div>
+            </div>
+            <div class="bg-blue-50 p-4 rounded-xl border border-blue-100">
+              <div class="text-blue-600 text-sm font-bold mb-1">현재 대출 중</div>
+              <div class="text-3xl font-black text-blue-700" id="dash-borrowing">0</div>
+            </div>
+            <div class="bg-red-50 p-4 rounded-xl border border-red-100">
+              <div class="text-red-600 text-sm font-bold mb-1">연체 도서</div>
+              <div class="text-3xl font-black text-red-700" id="dash-overdue">0</div>
+            </div>
+          </div>
+
+          <div class="mt-8 border-t pt-6">
+            <h3 class="text-lg font-bold text-red-600 mb-4"><i class="fa-solid fa-triangle-exclamation"></i> 연체 중인 학생</h3>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse">
+                <thead>
+                  <tr class="bg-gray-50 border-b">
+                    <th class="p-3 text-sm text-gray-600">학생</th>
+                    <th class="p-3 text-sm text-gray-600">책 번호</th>
+                    <th class="p-3 text-sm text-gray-600">책 제목</th>
+                    <th class="p-3 text-sm text-gray-600">예정일</th>
+                    <th class="p-3 text-sm text-red-600">연체일</th>
+                  </tr>
+                </thead>
+                <tbody id="dash-overdue-list" class="divide-y text-sm"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="mt-8 border-t pt-6">
+            <h3 class="text-lg font-bold text-gray-700 mb-1"><i class="fa-solid fa-book-open-reader text-green-600"></i> 학생별 대출 기록</h3>
+            <p class="text-xs text-gray-500 mb-4">대출 0권인 학생도 모두 보입니다. 학생 화면에는 상위 5명만 나옵니다.</p>
+            <div class="overflow-x-auto max-h-[400px] border rounded-lg">
+              <table class="w-full text-left border-collapse">
+                <thead class="bg-gray-100 sticky top-0">
+                  <tr>
+                    <th class="p-3 text-sm text-gray-600">학생</th>
+                    <th class="p-3 text-sm text-gray-600 text-center">이번 달</th>
+                    <th class="p-3 text-sm text-gray-600 text-center">전체</th>
+                    <th class="p-3 text-sm text-gray-600 text-center">한 줄 평</th>
+                  </tr>
+                </thead>
+                <tbody id="dash-reader-list" class="divide-y text-sm bg-white"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- 탭: 도서 관리 -->
+        <div id="tab-books" class="admin-tab-content hidden space-y-6">
+          <h2 class="text-2xl font-bold mb-4"><i class="fa-solid fa-book text-blue-600 mr-2"></i>도서 등록 및 관리</h2>
+
+          <div class="bg-blue-50 p-5 rounded-xl border border-blue-100">
+            <h3 class="font-bold text-blue-800 mb-3">새 도서 등록 (ISBN 검색)</h3>
+            <div class="flex gap-2 mb-2">
+              <input type="text" id="reg-isbn" inputmode="numeric" placeholder="ISBN 입력 후 Enter (바코드 스캐너 가능)" class="flex-1 p-2 border rounded-lg focus:outline-blue-500" onkeypress="if(event.key === 'Enter') app.searchISBN()">
+              <button onclick="app.startIsbnScan()" class="bg-gray-800 text-white px-3 py-2 rounded-lg font-bold whitespace-nowrap" aria-label="카메라로 ISBN 찍기"><i class="fa-solid fa-camera"></i></button>
+              <button id="isbn-search-btn" onclick="app.searchISBN()" class="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-blue-700 whitespace-nowrap">검색</button>
+            </div>
+            <label class="flex items-center gap-2 text-sm text-blue-800 mb-4 cursor-pointer select-none">
+              <input type="checkbox" id="quick-register" class="w-4 h-4">
+              <span><b>바로 등록 모드</b> — ISBN을 넣으면 확인 없이 1권씩 바로 등록 (책 여러 권을 연달아 찍을 때)</span>
+            </label>
+            <div id="quick-log" class="hidden mb-4 bg-white rounded-lg border border-blue-200 p-3 text-sm space-y-1 max-h-40 overflow-y-auto"></div>
+
+            <div id="reg-book-info" class="hidden bg-white p-4 rounded-lg border border-blue-200 mb-4">
+              <div class="flex gap-4">
+                <img id="reg-cover" alt="표지" class="w-16 h-24 object-cover bg-gray-200 rounded">
+                <div class="flex-1 space-y-2">
+                  <input type="text" id="reg-title" class="w-full font-bold text-lg border-b p-1" placeholder="제목">
+                  <div class="flex gap-2 text-sm">
+                    <input type="text" id="reg-author" class="flex-1 border-b p-1" placeholder="저자">
+                    <input type="text" id="reg-publisher" class="flex-1 border-b p-1" placeholder="출판사">
+                  </div>
+                </div>
+              </div>
+              <div class="mt-4 flex flex-wrap items-center gap-3 bg-gray-50 p-3 rounded-lg">
+                <label class="font-bold">이 책은 총 몇 권 있나요?</label>
+                <input type="number" id="reg-copies" value="1" min="1" max="100" class="w-20 p-2 border rounded text-center font-bold" onkeypress="if(event.key === 'Enter') app.registerBook()">
+                <span class="text-sm text-gray-500">권</span>
+                <button id="register-btn" onclick="app.registerBook()" class="ml-auto bg-green-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-green-700 shadow-sm">등록하기</button>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <h3 class="font-bold text-gray-700 mb-3 mt-8">전체 실물 도서 목록</h3>
+            <div class="flex flex-wrap gap-2 mb-3 items-center">
+              <input type="text" id="admin-book-search" placeholder="고유번호·제목·학생 검색" class="p-2 border rounded-lg text-sm w-56" onkeyup="app.filterAdminBooks()">
+              <button onclick="app.selectRecentCodes()" class="text-sm bg-blue-100 text-blue-700 px-3 py-2 rounded-lg font-bold"><i class="fa-solid fa-clock mr-1"></i>방금 등록한 책 선택</button>
+              <button onclick="app.clearSelection()" class="text-sm bg-gray-100 text-gray-700 px-3 py-2 rounded-lg font-bold">선택 해제</button>
+              <button id="print-selected-btn" onclick="app.printSelected()" class="text-sm bg-gray-800 text-white px-3 py-2 rounded-lg font-bold"><i class="fa-solid fa-print mr-1"></i>선택한 책 라벨 인쇄 (0)</button>
+              <label class="text-xs text-gray-500 flex items-center gap-1"><input type="checkbox" id="print-guides"> 칸 테두리도 인쇄</label>
+            </div>
+            <p class="text-xs text-gray-500 mb-3">라벨에는 QR코드와 책 번호가 인쇄됩니다. A4 24칸(3×8) 라벨지 기준입니다. 인쇄 창에서 <b>배율 100%</b>, <b>여백 기본값</b>으로 두고 일반 종이에 먼저 시험 인쇄해 보세요.</p>
+            <div class="overflow-x-auto max-h-[460px] border rounded-lg">
+              <table class="w-full text-left border-collapse">
+                <thead class="bg-gray-100 sticky top-0 shadow-sm z-[1]">
+                  <tr>
+                    <th class="p-3 w-10"><input type="checkbox" id="select-all-books" onchange="app.toggleSelectAll(this.checked)"></th>
+                    <th class="p-3 text-sm font-bold">고유번호</th>
+                    <th class="p-3 text-sm font-bold">제목</th>
+                    <th class="p-3 text-sm font-bold">저자</th>
+                    <th class="p-3 text-sm font-bold">상태</th>
+                    <th class="p-3 text-sm font-bold">예정일</th>
+                    <th class="p-3 text-sm font-bold">관리</th>
+                  </tr>
+                </thead>
+                <tbody id="admin-book-list" class="divide-y text-sm bg-white"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- 탭: 학생 관리 -->
+        <div id="tab-students" class="admin-tab-content hidden space-y-6">
+          <h2 class="text-2xl font-bold"><i class="fa-solid fa-users text-indigo-600 mr-2"></i>학생 관리</h2>
+
+          <div class="bg-indigo-50 p-4 rounded-xl border border-indigo-100">
+            <label class="block text-sm font-bold text-indigo-800 mb-2">관리할 학급을 먼저 선택하세요</label>
+            <select id="student-class-select" onchange="app.changeAdminStudentClass()" class="w-full md:w-96 p-3 border-2 border-indigo-200 rounded-xl bg-white font-bold"></select>
+            <p class="text-xs text-indigo-600 mt-2">여기서 선택한 학급에 학생이 등록됩니다. ‘현재 학급’과 별개로 다른 학급 명단도 관리할 수 있습니다.</p>
+          </div>
+
+          <div class="bg-green-50 p-5 rounded-xl border border-green-100">
+            <h3 class="font-bold text-green-800 mb-3">학생 한 명 등록</h3>
+            <div class="flex flex-wrap gap-2">
+              <input type="number" id="single-student-number" min="1" placeholder="번호" class="w-24 p-2 border rounded-lg">
+              <input type="text" id="single-student-name" placeholder="학생 이름" class="flex-1 min-w-[160px] p-2 border rounded-lg">
+              <button onclick="app.addOneStudent()" class="bg-green-600 text-white px-5 py-2 rounded-lg font-bold hover:bg-green-700">이 학급에 등록</button>
+            </div>
+          </div>
+
+          <div class="bg-purple-50 p-5 rounded-xl border border-purple-100">
+            <h3 class="font-bold text-purple-800 mb-2">학생 여러 명 일괄 등록</h3>
+            <p class="text-xs text-purple-600 mb-3"><code>번호 이름</code> 형식으로 붙여넣으세요. 위에서 선택한 학급에 들어갑니다.</p>
+            <textarea id="bulk-student-data" rows="5" class="w-full p-3 border rounded-lg text-sm font-mono mb-3" placeholder="1 김민준&#10;2 이서윤&#10;3 박지호"></textarea>
+            <button onclick="app.bulkAddStudents()" class="bg-purple-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-purple-700">선택 학급에 일괄 등록</button>
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <h3 id="student-list-title" class="font-bold text-gray-700">학생 명단</h3>
+              <span class="text-xs text-gray-500">숨김 학생은 학생용 이름 목록에 나타나지 않습니다.</span>
+            </div>
+            <div id="admin-student-list" class="space-y-2"></div>
+          </div>
+        </div>
+
+        <!-- 탭: 학급 관리 -->
+        <div id="tab-classes" class="admin-tab-content hidden space-y-6">
+          <h2 class="text-2xl font-bold mb-4"><i class="fa-solid fa-school text-yellow-600 mr-2"></i>학급 관리</h2>
+          <div class="bg-yellow-50 p-5 rounded-xl border border-yellow-100 mb-6">
+            <h3 class="font-bold text-yellow-800 mb-3">새 학급 만들기</h3>
+            <div class="flex flex-wrap gap-2 items-center">
+              <input type="number" id="class-year" placeholder="년도(예:2026)" class="w-24 p-2 border rounded-lg" value="2026">
+              <input type="number" id="class-grade" placeholder="학년" class="w-16 p-2 border rounded-lg">
+              <input type="number" id="class-room" placeholder="반" class="w-16 p-2 border rounded-lg">
+              <input type="text" id="class-name" placeholder="학급 별명 (선택)" class="w-32 p-2 border rounded-lg">
+              <button onclick="app.createClass()" class="bg-yellow-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-yellow-700">생성</button>
+            </div>
+          </div>
+          <h3 class="font-bold text-gray-700 mb-3">학급 목록</h3>
+          <div class="overflow-x-auto border rounded-lg">
+            <table class="w-full text-left border-collapse">
+              <thead class="bg-gray-100">
+                <tr>
+                  <th class="p-3 text-sm font-bold">학년도</th>
+                  <th class="p-3 text-sm font-bold">학년 반</th>
+                  <th class="p-3 text-sm font-bold">학생</th>
+                  <th class="p-3 text-sm font-bold">상태</th>
+                  <th class="p-3 text-sm font-bold">관리</th>
+                </tr>
+              </thead>
+              <tbody id="admin-class-list" class="divide-y text-sm bg-white"></tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+  <!-- 이름 확인 모달 -->
+  <div id="modal-confirm-student" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl text-center">
+      <div class="text-6xl text-blue-500 mb-4"><i class="fa-solid fa-circle-user"></i></div>
+      <p class="text-gray-500 mb-1">내 이름이 맞나요?</p>
+      <p class="text-3xl font-black mb-6" id="confirm-student-name"></p>
+      <div class="grid grid-cols-2 gap-3">
+        <button onclick="app.closeConfirmStudent()" class="btn-bounce bg-gray-200 text-gray-700 py-4 rounded-xl text-xl font-bold">아니요</button>
+        <button onclick="app.confirmStudent()" class="btn-bounce bg-blue-600 text-white py-4 rounded-xl text-xl font-bold">네, 맞아요</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 반납 확인 모달 -->
+  <div id="modal-confirm-return" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl text-center">
+      <div class="text-6xl text-orange-500 mb-4"><i class="fa-solid fa-book"></i></div>
+      <p class="text-gray-500 mb-1">이 책을 반납할까요?</p>
+      <p class="text-2xl font-black mb-2" id="confirm-return-title"></p>
+      <p class="text-sm text-gray-500 mb-6">책을 반납함(책꽂이)에 꼭 넣어 주세요.</p>
+      <div class="grid grid-cols-2 gap-3">
+        <button onclick="app.closeConfirmReturn()" class="btn-bounce bg-gray-200 text-gray-700 py-4 rounded-xl text-xl font-bold">아니요</button>
+        <button id="confirm-return-btn" onclick="app.doConfirmedReturn()" class="btn-bounce bg-orange-500 text-white py-4 rounded-xl text-xl font-bold">반납하기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 반납 후 별점·한 줄 평 모달 -->
+  <div id="modal-review" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl text-center">
+      <div class="text-5xl text-orange-500 mb-2"><i class="fa-solid fa-book-open-reader"></i></div>
+      <p class="text-gray-500 text-sm" id="review-who"></p>
+      <h3 class="text-xl font-black mb-4" id="review-title"></h3>
+      <p class="font-bold mb-2">이 책은 어땠나요?</p>
+      <div id="review-stars" class="flex justify-center gap-2 mb-4"></div>
+      <input type="text" id="review-comment" maxlength="80" placeholder="한 줄 느낌 (안 써도 괜찮아요)" class="w-full p-3 border-2 border-gray-200 rounded-xl mb-4 focus:outline-none focus:border-orange-400">
+      <div class="grid grid-cols-2 gap-3">
+        <button onclick="app.closeReview()" class="btn-bounce bg-gray-200 text-gray-700 py-3 rounded-xl font-bold">건너뛰기</button>
+        <button id="review-submit-btn" onclick="app.submitReview()" class="btn-bounce bg-orange-500 text-white py-3 rounded-xl font-bold">남기기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 카메라 스캐너 -->
+  <div id="modal-scanner" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl p-5 max-w-md w-full shadow-2xl text-center">
+      <div class="flex justify-between items-center mb-3">
+        <h3 class="text-xl font-black" id="scanner-title">책의 QR코드를 비춰요</h3>
+        <button onclick="app.closeScanner()" class="text-gray-500 hover:text-gray-800"><i class="fa-solid fa-xmark text-2xl"></i></button>
+      </div>
+      <div id="scanner-reader" class="w-full rounded-xl overflow-hidden bg-black min-h-[240px]"></div>
+      <p class="text-sm text-gray-500 mt-3" id="scanner-hint">네모 안에 QR코드가 들어오면 자동으로 찍혀요.</p>
+      <button id="scanner-fallback" onclick="app.closeScanner(); app.showView('student-borrow-1')" class="text-sm text-gray-500 underline mt-2">QR코드가 안 찍혀요 (번호로 빌리기)</button>
+    </div>
+  </div>
+
+  <div id="toast" class="fixed bottom-10 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-6 py-3 rounded-full shadow-2xl hidden z-[60] font-bold text-sm text-center min-w-[250px]"></div>
+
+  <!-- 라벨 인쇄용 (화면에는 안 보임) -->
+  <div id="print-area"></div>
+
+  <script>
+    const NO_COVER = 'https://placehold.co/100x150/eeeeee/999999?text=No+Image';
+    const SEARCH_PLACEHOLDER = '<div class="text-center text-gray-400 mt-10"><i class="fa-solid fa-magnifying-glass text-4xl mb-3"></i><br>검색어를 입력해주세요.</div>';
+
+    // ▼▼▼ 여기에 Apps Script 웹앱 주소(…/exec)를 붙여넣으세요 ▼▼▼
+    const API_URL = 'PASTE_YOUR_EXEC_URL_HERE';
+    // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+
+    const USE_MOCK = !/^https:\/\/script\.google\.com\//.test(API_URL);
+
+    // Apps Script와 기록을 주고받는 함수 (주소가 없으면 가짜 데이터로 미리보기)
+    const callServer = (functionName, ...args) => {
+      if (!USE_MOCK) {
+        return fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ fn: functionName, args: args })
+        })
+          .then(r => { if (!r.ok) throw new Error('서버 응답 오류 ' + r.status); return r.json(); })
+          .then(res => { if (!res.ok) throw new Error(res.error || '서버 오류'); return res.result; });
+      }
+      return new Promise(resolve => {
+        let name = functionName, a = args;
+        if (functionName === 'admin') { name = args[1]; a = args[2] || []; }
+        console.warn(`[미리보기 모드] ${name}`, a);
+        setTimeout(() => {
+          const mock = {
+            getAppInitData: { success: true, libraryName: '우리반 도서관', classInfo: '2026학년도 5학년 2반', maxLoans: 2, loanDays: 7, showRank: true, students: [
+              { 학생ID: 'S1', 학생번호: 1, 학생이름: '김민준' },
+              { 학생ID: 'S2', 학생번호: 2, 학생이름: '이서윤' },
+              { 학생ID: 'S3', 학생번호: 3, 학생이름: '박지호' }
+            ]},
+            searchBooks: [{ title: '아몬드', author: '손원평', publisher: '창비', cover: '', total: 3, available: 2, borrowing: 1 }],
+            getMyBooks: [
+              { bookCode: 'B001-1', title: '아몬드', borrowDate: '2026-10-10', dueDate: '2026-10-17', diffDays: 3, extensions: 0, canExtend: true },
+              { bookCode: 'B002-1', title: '어린왕자', borrowDate: '2026-10-01', dueDate: '2026-10-08', diffDays: -6, extensions: 1, canExtend: false }
+            ],
+            getBookForScan: { found: true, code: 'B001-1', status: '대출가능', title: '아몬드', author: '손원평', cover: '', borrowerName: '' },
+            getAppUrl: { success: true, url: 'https://script.google.com/macros/s/EXAMPLE/exec', isDev: false },
+            returnBook: { success: true, message: '반납이 완료되었습니다!', recordId: 'H0001', title: '아몬드', studentName: '김민준' },
+            getReadingStats: { enabled: true, totalCount: 12,
+              readers: [{ name: '김민준', count: 5 }, { name: '이서윤', count: 4 }, { name: '박지호', count: 2 }],
+              books: [{ title: '아몬드', cover: '', count: 4, avgStars: 4.5, starCount: 2 }, { title: '어린왕자', cover: '', count: 3, avgStars: 0, starCount: 0 }],
+              reviews: [{ name: '이서윤', title: '아몬드', stars: 5, comment: '주인공 마음이 궁금해서 끝까지 읽었어요', date: '2026-10-12' }]
+            },
+            verifyTeacher: a[0] === '1234',
+            getDashboardData: { total: 327, available: 291, borrowing: 36, overdue: 5,
+              readers: [{ name: '1번 김민준', month: 3, total: 9, reviews: 4 }, { name: '2번 이서윤', month: 0, total: 2, reviews: 0 }] },
+            getTeacherOverdueBooks: [{ studentName: '1번 김민준', bookCode: 'B002-1', title: '어린왕자', dueDate: '2026-10-08', overdueDays: 6 }],
+            getAllInventory: [
+              { bookCode: 'B001-1', title: '아몬드', author: '손원평', status: '대출가능', dueDate: '', borrower: '' },
+              { bookCode: 'B001-2', title: '아몬드', author: '손원평', status: '대출중', dueDate: '2026-10-17', borrower: '1번 김민준' },
+              { bookCode: 'B002-1', title: '어린왕자', author: '생텍쥐페리', status: '분실', dueDate: '', borrower: '' }
+            ],
+            getAdminStudents: [
+              { 학생ID: 'S1', 학급ID: 'C1', 학생번호: 1, 학생이름: '김민준', 상태: '재학' },
+              { 학생ID: 'S2', 학급ID: 'C1', 학생번호: 2, 학생이름: '이서윤', 상태: '숨김' }
+            ],
+            getClasses: { classes: [{ 학급ID: 'C1', 학년도: '2026', 학년: 5, 반: 2, 학급이름: '푸른숲', 상태: '사용 중', 공개학생수: 1, 숨김학생수: 1 }], currentId: 'C1' },
+            fetchBookInfoByISBN: { success: true, title: '아몬드', author: '손원평', publisher: '창비', cover: '', source: '미리보기' },
+            quickRegisterByISBN: { success: true, title: '아몬드', codes: ['B001-3'], message: '「아몬드」 등록 완료: B001-3' },
+            registerBook: { success: true, codes: ['B003-1', 'B003-2'], message: '「새 책」 등록 완료: B003-1, B003-2' }
+          };
+          resolve(name in mock ? mock[name] : { success: true, message: '처리가 완료되었습니다.' });
+        }, 300);
+      });
+    };
+
+    const app = {
+      state: {
+        students: [],
+        maxLoans: 2,
+        loanDays: 7,
+        classInfo: '',
+        libraryName: '우리반 도서관',
+        pw: '',
+        pendingStudent: null,
+        scan: null,
+        pendingReturn: null,
+        selectedStudent: null,
+        regCover: '',
+        statsPeriod: 'month',
+        review: { recordId: '', stars: 0 },
+        selectedCodes: new Set(),
+        recentCodes: [],
+        adminData: { books: [], filteredBooks: [], classes: [], students: [], currentClassId: '', selectedStudentClassId: '' }
+      },
+
+      esc: function(value) {
+        return String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
+      },
+
+      // 바코드 스캐너를 한글 상태에서 찍으면 B가 'ㅠ'로 들어오는 문제 보정
+      normalizeCode: function(value) {
+        return String(value || '').trim().toUpperCase().replace(/ㅠ/g, 'B').replace(/\s+/g, '');
+      },
+
+      starsHtml: function(n, size = '') {
+        let html = '';
+        for (let i = 1; i <= 5; i++) {
+          html += `<i class="fa-solid fa-star ${size} ${i <= Math.round(n) ? 'text-yellow-400' : 'text-gray-200'}"></i>`;
+        }
+        return html;
+      },
+
+      init: function() {
+        return callServer('getAppInitData')
+          .then(res => {
+            this.state.maxLoans = res.maxLoans || 2;
+            this.state.loanDays = res.loanDays || 7;
+            document.querySelectorAll('.max-loans-text').forEach(el => el.innerText = this.state.maxLoans);
+            document.querySelectorAll('.loan-days-text').forEach(el => el.innerText = this.state.loanDays);
+            document.getElementById('home-stats-btn').classList.toggle('hidden', res.showRank === false);
+            this.state.libraryName = res.libraryName || '우리반 도서관';
+            document.getElementById('header-class-name').innerText = this.state.libraryName;
+            document.title = this.state.libraryName;
+            if (res.success) {
+              this.state.students = res.students;
+              this.state.classInfo = res.classInfo;
+
+              document.getElementById('admin-current-class-label').innerText = res.classInfo;
+            } else {
+              this.state.students = [];
+              this.state.classInfo = '';
+              this.showToast(res.message, true);
+
+              document.getElementById('admin-current-class-label').innerText = '현재 학급 없음';
+            }
+          })
+          .catch(err => this.showToast('데이터를 불러오지 못했습니다. ' + (err && err.message ? err.message : ''), true));
+      },
+
+      // ── QR로 열렸을 때 (주소 끝의 ?book=B001-1 읽기) ──
+      checkScanParam: function() {
+        const code = new URLSearchParams(location.search).get('book');
+        if (code) this.openScan(code);
+      },
+
+      clearScanParam: function() {
+        try { history.replaceState(null, '', location.pathname); } catch (e) {}
+      },
+
+      // QR 내용에서 책 번호만 꺼내기 (주소 형태 ?book=B001-1 이든 그냥 B001-1 이든)
+      extractBookCode: function(text) {
+        const t = String(text || '').trim();
+        try {
+          const u = new URL(t);
+          const b = u.searchParams.get('book');
+          if (b) return this.normalizeCode(b);
+        } catch (e) {}
+        return this.normalizeCode(t);
+      },
+
+      // ── 카메라 스캐너 ──
+      scanner: null,
+      scanHandled: false,
+
+      openScanner: function(opts) {
+        if (typeof Html5Qrcode === 'undefined') {
+          this.showToast('카메라 도구를 불러오지 못했어요. 인터넷 연결을 확인해 주세요.', true);
+          if (opts.onFail) opts.onFail();
+          return;
+        }
+        document.getElementById('scanner-title').innerText = opts.title;
+        document.getElementById('scanner-hint').innerText = opts.hint;
+        document.getElementById('scanner-fallback').classList.toggle('hidden', !opts.showFallback);
+        document.getElementById('modal-scanner').classList.remove('hidden');
+        this.scanHandled = false;
+        const F = Html5QrcodeSupportedFormats;
+        this.scanner = new Html5Qrcode('scanner-reader', {
+          verbose: false,
+          formatsToSupport: opts.formats.map(f => F[f]),
+          experimentalFeatures: { useBarCodeDetectorIfSupported: true }
+        });
+        this.scanner.start(
+          { facingMode: 'environment' },
+          { fps: 10, qrbox: opts.box },
+          text => {
+            if (this.scanHandled) return;
+            this.scanHandled = true;
+            if (navigator.vibrate) navigator.vibrate(80);
+            this.closeScanner().then(() => opts.onResult(text));
+          },
+          () => {}
+        ).catch(err => {
+          this.closeScanner();
+          const denied = /NotAllowed|Permission/i.test(String(err && (err.name || err)));
+          this.showToast(denied ? '카메라 사용이 막혀 있어요. 주소창 왼쪽 자물쇠 → 권한에서 카메라를 허용해 주세요.' : '카메라를 켤 수 없어요.', true);
+          if (opts.onFail) opts.onFail();
+        });
+      },
+
+      closeScanner: function() {
+        document.getElementById('modal-scanner').classList.add('hidden');
+        const sc = this.scanner;
+        this.scanner = null;
+        if (!sc) return Promise.resolve();
+        return sc.stop().catch(() => {}).then(() => { try { sc.clear(); } catch (e) {} });
+      },
+
+      startBorrowScan: function() {
+        this.openScanner({
+          title: '책의 QR코드를 비춰요',
+          hint: '네모 안에 QR코드가 들어오면 자동으로 찍혀요.',
+          formats: ['QR_CODE'],
+          box: { width: 240, height: 240 },
+          showFallback: true,
+          onResult: text => this.openScan(this.extractBookCode(text)),
+          onFail: () => this.showView('student-borrow-1')
+        });
+      },
+
+      startIsbnScan: function() {
+        this.openScanner({
+          title: '책 뒤 ISBN 바코드를 비춰요',
+          hint: '978로 시작하는 바코드를 네모 안에 가로로 맞춰 주세요.',
+          formats: ['EAN_13', 'EAN_8', 'UPC_A'],
+          box: { width: 300, height: 140 },
+          showFallback: false,
+          onResult: text => {
+            document.getElementById('reg-isbn').value = String(text).replace(/[^0-9Xx]/g, '');
+            this.searchISBN();
+          }
+        });
+      },
+
+      openScan: function(rawCode) {
+        const code = this.normalizeCode(rawCode);
+        this.showView('student-scan');
+        document.getElementById('scan-book').innerHTML = '';
+        document.getElementById('scan-body').innerHTML = '<div class="text-center py-8 text-gray-500">책 정보를 불러오는 중...</div>';
+        callServer('getBookForScan', code)
+          .then(res => {
+            this.state.scan = res;
+            if (!res.found) {
+              document.getElementById('scan-body').innerHTML = `<div class="text-center py-6"><div class="text-5xl text-red-400 mb-3"><i class="fa-solid fa-circle-question"></i></div><p class="text-lg font-bold mb-4">${this.esc(res.message)}</p><button onclick="app.finishScan()" class="bg-gray-800 text-white px-6 py-3 rounded-xl font-bold">처음 화면으로</button></div>`;
+              return;
+            }
+            const cover = res.cover
+              ? `<img src="${this.esc(res.cover)}" class="w-20 h-28 object-cover rounded-lg shadow border flex-shrink-0">`
+              : '<div class="w-20 h-28 bg-gray-200 rounded-lg flex items-center justify-center text-gray-400 flex-shrink-0"><i class="fa-solid fa-book text-3xl"></i></div>';
+            document.getElementById('scan-book').innerHTML = `${cover}<div class="min-w-0"><h2 class="text-2xl font-black leading-tight">${this.esc(res.title)}</h2><p class="text-sm text-gray-500 mt-1">${this.esc(res.author)}</p><p class="text-xs font-mono bg-gray-100 inline-block px-2 rounded mt-2">${this.esc(res.code)}</p></div>`;
+            const body = document.getElementById('scan-body');
+            if (res.status === '대출가능') {
+              body.innerHTML = '<p class="text-xl font-bold text-blue-700 mb-3"><i class="fa-solid fa-hand-pointer mr-1"></i>누가 빌리나요? 내 이름을 눌러요</p><div id="scan-student-list" class="grid grid-cols-3 gap-3 max-h-[50vh] overflow-y-auto pr-1"></div>';
+              this.renderStudentList('scan-student-list', 'scan');
+            } else if (res.status === '대출중') {
+              body.innerHTML = `<div class="bg-orange-50 rounded-xl p-4 text-center mb-4"><p class="text-gray-600">지금 <b>${this.esc(res.borrowerName || '누군가')}</b>이(가) 빌린 책이에요.</p></div>
+                <button onclick="app.askConfirmReturn('${this.esc(res.code)}', this.dataset.title)" data-title="${this.esc(res.title)}" class="btn-bounce w-full bg-orange-500 text-white text-2xl font-bold py-5 rounded-2xl shadow"><i class="fa-solid fa-right-left mr-2"></i>반납하기</button>`;
+            } else {
+              body.innerHTML = `<p class="text-center text-lg font-bold text-gray-600 py-6">이 책은 지금 빌릴 수 없어요. 선생님께 말씀드려요.</p>`;
+            }
+          })
+          .catch(() => { document.getElementById('scan-body').innerHTML = '<div class="text-center py-8 text-red-500">책 정보를 불러오지 못했어요. 다시 찍어 보세요.</div>'; });
+      },
+
+      finishScan: function() {
+        this.state.scan = null;
+        this.clearScanParam();
+        this.showView('student-home');
+      },
+
+      borrowScanned: function(student) {
+        const scan = this.state.scan;
+        if (!scan) return;
+        document.getElementById('scan-body').innerHTML = '<div class="text-center py-8 text-gray-500">빌리는 중...</div>';
+        callServer('borrowBook', student['학생ID'], scan.code)
+          .then(res => {
+            if (res.success) {
+              this.showToast(res.message);
+              document.getElementById('scan-body').innerHTML = `<div class="text-center py-6"><div class="text-6xl text-green-500 mb-3"><i class="fa-solid fa-circle-check"></i></div><p class="text-2xl font-black mb-2">${this.esc(student['학생이름'])}, 빌리기 완료!</p><p class="text-gray-600 mb-6">${this.esc(res.message)}</p><button onclick="app.finishScan()" class="bg-gray-800 text-white px-8 py-3 rounded-xl font-bold text-lg">확인</button></div>`;
+            } else {
+              this.showToast(res.message, true);
+              this.openScan(scan.code);
+            }
+          })
+          .catch(() => { this.showToast('처리 중 오류가 발생했습니다.', true); this.openScan(scan.code); });
+      },
+
+      // ── 반납 (목록·QR 공통) ──
+      askConfirmReturn: function(code, title) {
+        this.state.pendingReturn = code;
+        document.getElementById('confirm-return-title').innerText = title ? `「${title}」` : code;
+        document.getElementById('modal-confirm-return').classList.remove('hidden');
+      },
+
+      closeConfirmReturn: function() {
+        this.state.pendingReturn = null;
+        document.getElementById('modal-confirm-return').classList.add('hidden');
+      },
+
+      doConfirmedReturn: function() {
+        const code = this.state.pendingReturn;
+        const btn = document.getElementById('confirm-return-btn');
+        if (!code || btn.disabled) return;
+        btn.disabled = true;
+        callServer('returnBook', code)
+          .then(res => {
+            this.closeConfirmReturn();
+            if (!res.success) return this.showToast(res.message, true);
+            this.showToast(res.message);
+            if (this.state.scan) this.finishScan();
+            else if (this.state.selectedStudent) this.loadMyBooks(this.state.selectedStudent);
+            if (res.recordId) this.openReview(res);
+          })
+          .catch(() => this.showToast('처리 중 오류가 발생했습니다.', true))
+          .finally(() => { btn.disabled = false; });
+      },
+
+      // ── UI 제어 ──
+      showView: function(viewId) {
+        ['view-student-home', 'view-student-borrow-guide', 'view-student-scan', 'view-student-borrow-1', 'view-student-borrow-2', 'view-student-return',
+         'view-student-search', 'view-student-mybooks-1', 'view-student-mybooks-2', 'view-student-stats', 'view-teacher-admin']
+          .forEach(v => document.getElementById(v).classList.add('hidden'));
+        document.getElementById('view-' + viewId).classList.remove('hidden');
+
+        if (viewId === 'student-borrow-1') this.renderStudentList('borrow-student-list', 'borrow');
+        if (viewId === 'student-mybooks-1') this.renderStudentList('mybooks-student-list', 'mybooks');
+        if (viewId === 'student-return') {
+          document.getElementById('return-book-code').value = '';
+          setTimeout(() => document.getElementById('return-book-code').focus(), 100);
+        }
+        if (viewId === 'student-search') {
+          document.getElementById('search-input').value = '';
+          document.getElementById('search-results').innerHTML = SEARCH_PLACEHOLDER;
+          setTimeout(() => document.getElementById('search-input').focus(), 100);
+        }
+        if (viewId === 'student-stats') this.loadStats('month');
+      },
+
+      toastTimer: null,
+      showToast: function(msg, isError = false) {
+        const t = document.getElementById('toast');
+        t.innerHTML = `<i class="fa-solid ${isError ? 'fa-circle-exclamation' : 'fa-circle-check'} mr-2"></i>${this.esc(msg)}`;
+        t.style.backgroundColor = isError ? '#ef4444' : '#1f2937';
+        t.classList.remove('hidden');
+        clearTimeout(this.toastTimer);
+        this.toastTimer = setTimeout(() => t.classList.add('hidden'), 3500);
+      },
+
+      showLoading: function(show, isAdmin = false) {
+        if (!isAdmin) return;
+        document.getElementById('admin-loading').classList.toggle('hidden', !show);
+      },
+
+      // ── 학생 기능 ──
+      renderStudentList: function(containerId, action) {
+        const container = document.getElementById(containerId);
+        container.innerHTML = '';
+        if (this.state.students.length === 0) {
+          container.innerHTML = '<div class="col-span-2 sm:col-span-3 text-center py-10 text-gray-500">등록된 학생이 없습니다.</div>';
+          return;
+        }
+        this.state.students.forEach(s => {
+          const btn = document.createElement('button');
+          btn.className = 'btn-bounce bg-white border-2 border-gray-200 hover:border-blue-500 rounded-xl p-4 text-center shadow-sm flex flex-col items-center';
+          btn.innerHTML = `<span class="text-gray-400 text-sm font-bold mb-1">${this.esc(s['학생번호'])}번</span><span class="text-xl font-bold text-gray-800">${this.esc(s['학생이름'])}</span>`;
+          btn.onclick = () => {
+            if (action === 'borrow' || action === 'scan') this.askConfirmStudent(s, action);
+            else this.loadMyBooks(s);
+          };
+          container.appendChild(btn);
+        });
+      },
+
+      askConfirmStudent: function(student, action) {
+        this.state.pendingStudent = student;
+        this.state.pendingAction = action || 'borrow';
+        document.getElementById('confirm-student-name').innerText = `${student['학생번호']}번 ${student['학생이름']}`;
+        document.getElementById('modal-confirm-student').classList.remove('hidden');
+      },
+
+      closeConfirmStudent: function() {
+        this.state.pendingStudent = null;
+        document.getElementById('modal-confirm-student').classList.add('hidden');
+      },
+
+      confirmStudent: function() {
+        const s = this.state.pendingStudent;
+        document.getElementById('modal-confirm-student').classList.add('hidden');
+        if (!s) return;
+        if (this.state.pendingAction === 'scan') return this.borrowScanned(s);
+        this.state.selectedStudent = s;
+        document.getElementById('borrow-selected-student').innerText = `${s['학생번호']}번 ${s['학생이름']}`;
+        document.getElementById('borrow-book-code').value = '';
+        this.showView('student-borrow-2');
+        setTimeout(() => document.getElementById('borrow-book-code').focus(), 100);
+      },
+
+      submitBorrow: function() {
+        const btn = document.getElementById('borrow-submit-btn');
+        if (btn.disabled) return;
+        const input = document.getElementById('borrow-book-code');
+        const code = this.normalizeCode(input.value);
+        input.value = code;
+        if (!code) return this.showToast('책 번호를 입력하세요.', true);
+        if (!this.state.selectedStudent) return this.showToast('학생 정보가 없습니다.', true);
+
+        btn.disabled = true;
+        btn.innerText = '처리 중...';
+        callServer('borrowBook', this.state.selectedStudent['학생ID'], code)
+          .then(res => {
+            if (res.success) {
+              this.showToast(res.message);
+              this.showView('student-home');
+            } else {
+              this.showToast(res.message, true);
+              input.select();
+            }
+          })
+          .catch(() => this.showToast('처리 중 오류가 발생했습니다.', true))
+          .finally(() => { btn.disabled = false; btn.innerText = '대출하기'; });
+      },
+
+      submitReturn: function() {
+        const btn = document.getElementById('return-submit-btn');
+        if (btn.disabled) return;
+        const input = document.getElementById('return-book-code');
+        const code = this.normalizeCode(input.value);
+        input.value = code;
+        if (!code) return this.showToast('책 번호를 입력하세요.', true);
+
+        btn.disabled = true;
+        btn.innerText = '처리 중...';
+        callServer('returnBook', code)
+          .then(res => {
+            if (res.success) {
+              this.showToast(res.message);
+              this.showView('student-home');
+              if (res.recordId) this.openReview(res);
+            } else {
+              this.showToast(res.message, true);
+              input.select();
+            }
+          })
+          .catch(() => this.showToast('처리 중 오류가 발생했습니다.', true))
+          .finally(() => { btn.disabled = false; btn.innerText = '반납하기'; });
+      },
+
+      // ── 별점·한 줄 평 ──
+      openReview: function(res) {
+        this.state.review = { recordId: res.recordId, stars: 0 };
+        document.getElementById('review-who').innerText = res.studentName ? `${res.studentName}, 다 읽었군요!` : '다 읽었군요!';
+        document.getElementById('review-title').innerText = res.title ? `「${res.title}」` : '';
+        document.getElementById('review-comment').value = '';
+        this.renderReviewStars();
+        document.getElementById('modal-review').classList.remove('hidden');
+      },
+
+      renderReviewStars: function() {
+        const box = document.getElementById('review-stars');
+        box.innerHTML = '';
+        for (let i = 1; i <= 5; i++) {
+          const b = document.createElement('button');
+          b.className = 'btn-bounce text-4xl p-1';
+          b.innerHTML = `<i class="fa-solid fa-star ${i <= this.state.review.stars ? 'text-yellow-400' : 'text-gray-200'}"></i>`;
+          b.onclick = () => { this.state.review.stars = i; this.renderReviewStars(); };
+          box.appendChild(b);
+        }
+      },
+
+      closeReview: function() {
+        document.getElementById('modal-review').classList.add('hidden');
+        this.state.review = { recordId: '', stars: 0 };
+      },
+
+      submitReview: function() {
+        const r = this.state.review;
+        if (!r.stars) return this.showToast('별을 눌러서 몇 점인지 골라 주세요.', true);
+        const btn = document.getElementById('review-submit-btn');
+        btn.disabled = true;
+        callServer('saveReview', r.recordId, r.stars, document.getElementById('review-comment').value)
+          .then(res => {
+            this.showToast(res.message, !res.success);
+            this.closeReview();
+          })
+          .catch(() => this.showToast('저장 중 오류가 발생했습니다.', true))
+          .finally(() => { btn.disabled = false; });
+      },
+
+      doSearch: function() {
+        const q = document.getElementById('search-input').value.trim();
+        if (q.length < 2) return this.showToast('2글자 이상 입력하세요.', true);
+        const container = document.getElementById('search-results');
+        container.innerHTML = '<div class="text-center py-4 text-gray-500">검색 중...</div>';
+        callServer('searchBooks', q)
+          .then(res => {
+            if (res.length === 0) {
+              container.innerHTML = '<div class="text-center py-10 text-gray-500">검색 결과가 없습니다.</div>';
+              return;
+            }
+            container.innerHTML = res.map(b => {
+              const statusTag = b.available > 0
+                ? `<span class="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-bold"><i class="fa-solid fa-circle-check mr-1"></i>대출가능 ${b.available}권</span>`
+                : `<span class="bg-red-100 text-red-700 px-2 py-1 rounded text-xs font-bold"><i class="fa-solid fa-circle-xmark mr-1"></i>모두 대출중</span>`;
+              const coverImg = b.cover
+                ? `<img src="${this.esc(b.cover)}" class="w-16 h-24 object-cover rounded shadow border">`
+                : `<div class="w-16 h-24 bg-gray-200 rounded flex items-center justify-center text-gray-400"><i class="fa-solid fa-book text-2xl"></i></div>`;
+              return `
+                <div class="flex gap-4 p-4 border rounded-xl bg-white shadow-sm">
+                  ${coverImg}
+                  <div class="flex-1">
+                    <h3 class="font-bold text-lg leading-tight mb-1">${this.esc(b.title)}</h3>
+                    <p class="text-sm text-gray-500 mb-2">${this.esc(b.author)} | ${this.esc(b.publisher)}</p>
+                    <div class="flex items-center gap-2">
+                      <span class="text-xs text-gray-400">총 ${b.total}권</span>
+                      ${statusTag}
+                    </div>
+                  </div>
+                </div>`;
+            }).join('');
+          })
+          .catch(() => { container.innerHTML = '<div class="text-center py-10 text-red-500">검색 중 오류가 발생했습니다.</div>'; });
+      },
+
+      loadMyBooks: function(student) {
+        this.state.selectedStudent = student;
+        document.getElementById('mybooks-title').innerText = `${student['학생이름']}의 빌린 책`;
+        const container = document.getElementById('mybooks-list');
+        container.innerHTML = '<div class="text-center py-4 text-gray-500">불러오는 중...</div>';
+        this.showView('student-mybooks-2');
+
+        callServer('getMyBooks', student['학생ID'])
+          .then(res => {
+            if (res.length === 0) {
+              container.innerHTML = '<div class="text-center py-10 text-gray-500">현재 빌린 책이 없습니다.</div>';
+              return;
+            }
+            const header = `<p class="text-sm text-gray-500 mb-2">${res.length} / ${this.state.maxLoans}권 빌리는 중</p>`;
+            container.innerHTML = header + res.map(b => {
+              let dDayClass = 'bg-blue-100 text-blue-800', dDayText = `D-${b.diffDays}`;
+              if (b.diffDays < 0) { dDayClass = 'bg-red-100 text-red-800 animate-pulse'; dDayText = `${Math.abs(b.diffDays)}일 연체!`; }
+              else if (b.diffDays === 0) { dDayClass = 'bg-orange-100 text-orange-800'; dDayText = '오늘 반납'; }
+              const extendBtn = b.canExtend
+                ? `<button onclick="app.extendLoan('${this.esc(b.bookCode)}')" class="btn-bounce text-sm bg-blue-50 text-blue-700 border border-blue-200 px-3 py-2 rounded-lg font-bold"><i class="fa-solid fa-clock-rotate-left mr-1"></i>${this.state.loanDays}일 더 읽을래요 (연장)</button>`
+                : (b.extensions > 0 ? `<span class="self-center text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded">연장 ${b.extensions}번 함</span>` : '');
+              return `
+                <div class="p-4 border rounded-xl bg-white shadow-sm relative overflow-hidden">
+                  <div class="absolute top-0 right-0 ${dDayClass} px-3 py-1 rounded-bl-xl font-bold text-sm">${dDayText}</div>
+                  <h3 class="font-bold text-lg mb-1 pr-16">${this.esc(b.title)}</h3>
+                  <div class="text-sm text-gray-600 mb-2 font-mono bg-gray-100 inline-block px-2 rounded">${this.esc(b.bookCode)}</div>
+                  <div class="text-xs text-gray-500 flex gap-4">
+                    <span>대출일: ${b.borrowDate}</span>
+                    <span class="font-bold text-gray-700">예정일: ${b.dueDate}</span>
+                  </div>
+                  <div class="flex flex-wrap gap-2 mt-3">
+                    <button onclick="app.askConfirmReturn('${this.esc(b.bookCode)}', this.dataset.title)" data-title="${this.esc(b.title)}" class="btn-bounce text-lg bg-orange-500 text-white px-5 py-3 rounded-xl font-bold shadow"><i class="fa-solid fa-right-left mr-1"></i>반납하기</button>
+                    ${extendBtn}
+                  </div>
+                </div>`;
+            }).join('');
+          })
+          .catch(() => { container.innerHTML = '<div class="text-center py-10 text-red-500">목록을 불러오지 못했습니다.</div>'; });
+      },
+
+      extendLoan: function(bookCode) {
+        const s = this.state.selectedStudent;
+        if (!s) return;
+        callServer('extendLoan', s['학생ID'], bookCode)
+          .then(res => {
+            this.showToast(res.message, !res.success);
+            this.loadMyBooks(s);
+          })
+          .catch(() => this.showToast('연장 중 오류가 발생했습니다.', true));
+      },
+
+      // ── 우리반 독서 기록 ──
+      loadStats: function(period) {
+        this.state.statsPeriod = period;
+        document.querySelectorAll('.stats-period-btn').forEach(b => {
+          const on = b.id === 'stats-period-' + period;
+          b.className = 'stats-period-btn flex-1 py-2 rounded-xl font-bold ' + (on ? 'bg-yellow-400 text-yellow-900' : 'bg-gray-100 text-gray-500');
+        });
+        const box = document.getElementById('stats-content');
+        box.innerHTML = '<div class="text-center py-6 text-gray-500">불러오는 중...</div>';
+        callServer('getReadingStats', period)
+          .then(res => {
+            if (!res.enabled) { box.innerHTML = '<div class="text-center py-10 text-gray-500">선생님이 아직 열어두지 않았어요.</div>'; return; }
+            if (!res.totalCount) { box.innerHTML = '<div class="text-center py-10 text-gray-500">아직 기록이 없어요. 첫 번째로 책을 빌려 보세요!</div>'; return; }
+            const rankIcon = i => i === 0 ? '<i class="fa-solid fa-crown text-yellow-500 text-xl"></i>'
+              : i === 1 ? '<i class="fa-solid fa-medal text-gray-400 text-xl"></i>'
+              : i === 2 ? '<i class="fa-solid fa-medal text-amber-600 text-xl"></i>'
+              : `<span class="font-black text-gray-400">${i + 1}</span>`;
+
+            const readers = res.readers.map((r, i) => `
+              <div class="flex items-center gap-3 p-3 rounded-xl ${i === 0 ? 'bg-yellow-50 border border-yellow-200' : 'bg-gray-50'}">
+                <div class="w-8 text-center">${rankIcon(i)}</div>
+                <div class="flex-1 font-bold text-lg">${this.esc(r.name)}</div>
+                <div class="font-black text-green-700">${r.count}권</div>
+              </div>`).join('');
+
+            const books = res.books.map((b, i) => `
+              <div class="flex items-center gap-3 p-3 rounded-xl bg-gray-50">
+                <div class="w-8 text-center">${rankIcon(i)}</div>
+                ${b.cover ? `<img src="${this.esc(b.cover)}" class="w-10 h-14 object-cover rounded border">` : '<div class="w-10 h-14 bg-gray-200 rounded flex items-center justify-center text-gray-400"><i class="fa-solid fa-book"></i></div>'}
+                <div class="flex-1 min-w-0">
+                  <div class="font-bold truncate">${this.esc(b.title)}</div>
+                  <div class="text-xs">${b.starCount ? this.starsHtml(b.avgStars) + ` <span class="text-gray-500">${b.avgStars}</span>` : '<span class="text-gray-400">아직 별점 없음</span>'}</div>
+                </div>
+                <div class="text-sm font-bold text-blue-700 whitespace-nowrap">${b.count}번 대출</div>
+              </div>`).join('');
+
+            const reviews = res.reviews.length ? res.reviews.map(r => `
+              <div class="p-3 rounded-xl border bg-white">
+                <div class="text-sm mb-1">${this.starsHtml(r.stars)}</div>
+                ${r.comment ? `<p class="font-medium mb-1">${this.esc(r.comment)}</p>` : ''}
+                <p class="text-xs text-gray-500">${this.esc(r.name)} · 「${this.esc(r.title)}」</p>
+              </div>`).join('') : '<div class="text-gray-400 text-sm">아직 한 줄 평이 없어요. 책을 반납할 때 남길 수 있어요!</div>';
+
+            box.innerHTML = `
+              <section><h3 class="font-bold text-lg mb-2"><i class="fa-solid fa-trophy text-yellow-500 mr-1"></i>책을 많이 빌린 친구</h3><div class="space-y-2">${readers}</div></section>
+              <section><h3 class="font-bold text-lg mb-2"><i class="fa-solid fa-fire text-orange-500 mr-1"></i>인기 있는 책</h3><div class="space-y-2">${books}</div></section>
+              <section><h3 class="font-bold text-lg mb-2"><i class="fa-solid fa-comment-dots text-blue-500 mr-1"></i>친구들의 한 줄 평</h3><div class="space-y-2">${reviews}</div></section>`;
+          })
+          .catch(() => { box.innerHTML = '<div class="text-center py-10 text-red-500">기록을 불러오지 못했습니다.</div>'; });
+      },
+
+      // ── 교사 기능 ──
+      // 교사 요청은 모두 비밀번호와 함께 서버의 admin()으로 보냄
+      callAdmin: function(action, ...args) {
+        return callServer('admin', this.state.pw, action, args).then(res => {
+          if (res && res.authError) {
+            this.state.pw = '';
+            this.showView('student-home');
+            this.showToast(res.message, true);
+            throw new Error('auth');
+          }
+          return res;
+        });
+      },
+
+      showTeacherLogin: function() {
+        document.getElementById('teacher-pw').value = '';
+        document.getElementById('modal-teacher-login').classList.remove('hidden');
+        setTimeout(() => document.getElementById('teacher-pw').focus(), 100);
+      },
+
+      loginTeacher: function() {
+        const pw = document.getElementById('teacher-pw').value;
+        if (!pw) return;
+        callServer('verifyTeacher', pw)
+          .then(isValid => {
+            if (isValid) {
+              this.state.pw = pw;
+              document.getElementById('modal-teacher-login').classList.add('hidden');
+              this.showView('teacher-admin');
+              this.showAdminTab('dashboard');
+            } else {
+              this.showToast('비밀번호가 틀렸습니다.', true);
+            }
+          })
+          .catch(() => this.showToast('로그인 처리 중 오류 발생', true));
+      },
+
+      logoutTeacher: function() {
+        this.state.pw = '';
+        this.showView('student-home');
+      },
+
+      showAdminTab: function(tabId) {
+        document.querySelectorAll('.admin-tab-content').forEach(el => el.classList.add('hidden'));
+        document.querySelectorAll('.admin-tab-btn').forEach(el => {
+          el.classList.remove('bg-green-50', 'text-green-700');
+          el.classList.add('text-gray-600', 'hover:bg-gray-50');
+        });
+        document.getElementById('tab-' + tabId).classList.remove('hidden');
+        const tabBtn = document.getElementById('tab-btn-' + tabId);
+        tabBtn.classList.remove('text-gray-600', 'hover:bg-gray-50');
+        tabBtn.classList.add('bg-green-50', 'text-green-700');
+
+        if (tabId === 'dashboard') this.loadDashboard();
+        if (tabId === 'books') { this.loadAdminBooks(); setTimeout(() => document.getElementById('reg-isbn').focus(), 100); }
+        if (tabId === 'students') this.loadAdminStudents();
+        if (tabId === 'classes') this.loadAdminClasses();
+      },
+
+      loadDashboard: function() {
+        this.showLoading(true, true);
+        this.callAdmin('getDashboardData')
+          .then(res => {
+            if (res.error) { this.showToast(res.error, true); return; }
+            document.getElementById('dash-total').innerText = res.total;
+            document.getElementById('dash-available').innerText = res.available;
+            document.getElementById('dash-borrowing').innerText = res.borrowing;
+            document.getElementById('dash-overdue').innerText = res.overdue;
+            document.getElementById('dash-reader-list').innerHTML = (res.readers || []).length
+              ? res.readers.map(r => `
+                  <tr class="${r.total === 0 ? 'text-gray-400' : ''}">
+                    <td class="p-3 font-bold">${this.esc(r.name)}</td>
+                    <td class="p-3 text-center">${r.month}</td>
+                    <td class="p-3 text-center font-bold">${r.total}</td>
+                    <td class="p-3 text-center">${r.reviews}</td>
+                  </tr>`).join('')
+              : '<tr><td colspan="4" class="p-4 text-center text-gray-500">학생이 없습니다.</td></tr>';
+            return this.callAdmin('getTeacherOverdueBooks').then(overdues => {
+              document.getElementById('dash-overdue-list').innerHTML = overdues.length === 0
+                ? '<tr><td colspan="5" class="p-4 text-center text-gray-500"><i class="fa-solid fa-face-smile text-green-500 mr-1"></i>연체된 도서가 없습니다.</td></tr>'
+                : overdues.map(o => `
+                    <tr>
+                      <td class="p-3 font-bold">${this.esc(o.studentName)}</td>
+                      <td class="p-3 font-mono">${this.esc(o.bookCode)}</td>
+                      <td class="p-3 truncate max-w-[150px]">${this.esc(o.title)}</td>
+                      <td class="p-3">${o.dueDate}</td>
+                      <td class="p-3 font-bold text-red-600">+${o.overdueDays}일</td>
+                    </tr>`).join('');
+            });
+          })
+          .catch(err => { if (err.message !== 'auth') this.showToast('대시보드를 불러오지 못했습니다.', true); })
+          .finally(() => this.showLoading(false, true));
+      },
+
+      // ── ISBN 검색·등록 ──
+      searchISBN: function() {
+        const isbnInput = document.getElementById('reg-isbn');
+        const btn = document.getElementById('isbn-search-btn');
+        if (btn.disabled) return;
+        const isbn = isbnInput.value.replace(/[^0-9Xx]/g, '').toUpperCase();
+        if (!isbn) return this.showToast('ISBN을 입력하세요.', true);
+        isbnInput.value = isbn;
+
+        btn.innerText = '검색중...';
+        btn.disabled = true;
+        const done = () => { btn.innerText = '검색'; btn.disabled = false; };
+
+        if (document.getElementById('quick-register').checked) {
+          this.callAdmin('quickRegisterByISBN', isbn, 1)
+            .then(res => {
+              done();
+              if (res.success) {
+                this.addQuickLog(res.message, 'ok');
+                this.rememberCodes(res.codes);
+                this.showToast(res.message);
+                isbnInput.value = '';
+                isbnInput.focus();
+                this.loadAdminBooks();
+              } else if (res.needManual) {
+                this.addQuickLog(isbn + ' — 정보 없음, 직접 입력 필요', 'warn');
+                this.showManualForm(res.message);
+              } else {
+                this.addQuickLog(isbn + ' — ' + res.message, 'error');
+                this.showToast(res.message, true);
+                isbnInput.select();
+              }
+            })
+            .catch(err => { done(); if (err.message !== 'auth') this.showToast('등록 오류: ' + (err.message || '알 수 없는 오류'), true); });
+          return;
+        }
+
+        this.callAdmin('fetchBookInfoByISBN', isbn)
+          .then(res => {
+            done();
+            if (res.success) {
+              document.getElementById('reg-book-info').classList.remove('hidden');
+              document.getElementById('reg-title').value = res.title;
+              document.getElementById('reg-author').value = res.author;
+              document.getElementById('reg-publisher').value = res.publisher;
+              this.state.regCover = res.cover || '';
+              document.getElementById('reg-cover').src = res.cover || NO_COVER;
+              document.getElementById('reg-copies').value = 1;
+              this.showToast(`${res.source || '도서 정보'}에서 찾았습니다. 권수를 확인하고 Enter!`);
+              setTimeout(() => document.getElementById('reg-copies').select(), 100);
+            } else {
+              this.showManualForm(res.message);
+            }
+          })
+          .catch(err => { done(); if (err.message !== 'auth') this.showToast('ISBN 검색 오류: ' + (err.message || '알 수 없는 오류'), true); });
+      },
+
+      showManualForm: function(message) {
+        this.showToast(message, true);
+        document.getElementById('reg-book-info').classList.remove('hidden');
+        ['reg-title', 'reg-author', 'reg-publisher'].forEach(id => document.getElementById(id).value = '');
+        this.state.regCover = '';
+        document.getElementById('reg-cover').src = NO_COVER;
+        document.getElementById('reg-copies').value = 1;
+        document.getElementById('reg-title').focus();
+      },
+
+      addQuickLog: function(text, kind) {
+        const icons = { ok: 'fa-circle-check text-green-600', warn: 'fa-triangle-exclamation text-amber-500', error: 'fa-circle-xmark text-red-600' };
+        const log = document.getElementById('quick-log');
+        log.classList.remove('hidden');
+        const line = document.createElement('div');
+        line.className = kind === 'ok' ? 'text-gray-700' : 'text-red-600';
+        line.innerHTML = `<i class="fa-solid ${icons[kind]} mr-1"></i>${this.esc(text)}`;
+        log.prepend(line);
+      },
+
+      registerBook: function() {
+        const btn = document.getElementById('register-btn');
+        if (btn.disabled) return;
+        const bookInfo = {
+          isbn: document.getElementById('reg-isbn').value.trim(),
+          title: document.getElementById('reg-title').value.trim(),
+          author: document.getElementById('reg-author').value.trim(),
+          publisher: document.getElementById('reg-publisher').value.trim(),
+          cover: this.state.regCover
+        };
+        const copies = document.getElementById('reg-copies').value;
+        if (!bookInfo.title) return this.showToast('책 제목이 필요합니다.', true);
+
+        btn.disabled = true;
+        this.showLoading(true, true);
+        this.callAdmin('registerBook', bookInfo, copies)
+          .then(res => {
+            if (res.success) {
+              this.showToast(res.message);
+              this.addQuickLog(res.message, 'ok');
+              this.rememberCodes(res.codes);
+              document.getElementById('reg-book-info').classList.add('hidden');
+              document.getElementById('reg-isbn').value = '';
+              document.getElementById('reg-isbn').focus();
+              this.loadAdminBooks();
+            } else {
+              this.showToast(res.message, true);
+              this.showLoading(false, true);
+            }
+          })
+          .catch(err => { this.showLoading(false, true); if (err.message !== 'auth') this.showToast('등록 중 오류 발생', true); })
+          .finally(() => { btn.disabled = false; });
+      },
+
+      rememberCodes: function(codes) {
+        (codes || []).forEach(c => this.state.recentCodes.push(c));
+      },
+
+      // ── 실물 도서 목록 / 상태 변경 / 라벨 인쇄 ──
+      loadAdminBooks: function() {
+        this.showLoading(true, true);
+        this.callAdmin('getAllInventory')
+          .then(books => {
+            this.state.adminData.books = books;
+            this.filterAdminBooks();
+          })
+          .catch(err => { if (err.message !== 'auth') this.showToast('도서 목록을 불러오지 못했습니다.', true); })
+          .finally(() => this.showLoading(false, true));
+      },
+
+      renderAdminBooks: function(books) {
+        const tbody = document.getElementById('admin-book-list');
+        this.state.adminData.filteredBooks = books;
+        if (books.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="7" class="p-4 text-center">등록된 도서가 없습니다.</td></tr>';
+          this.updateSelectionUI();
+          return;
+        }
+        const badge = {
+          '대출가능': 'bg-green-100 text-green-700', '대출중': 'bg-blue-100 text-blue-700',
+          '분실': 'bg-red-100 text-red-700', '폐기': 'bg-gray-200 text-gray-600'
+        };
+        tbody.innerHTML = books.map(b => {
+          const code = this.esc(b.bookCode);
+          const options = ['대출가능', '분실', '폐기'].filter(s => s !== b.status).map(s => {
+            const label = s === '대출가능' ? (b.status === '대출중' ? '선생님이 반납 처리' : '대출가능으로 복구') : s + ' 처리';
+            return `<option value="${s}">${label}</option>`;
+          }).join('');
+          return `
+            <tr class="hover:bg-gray-50 ${b.status === '분실' || b.status === '폐기' ? 'opacity-60' : ''}">
+              <td class="p-3"><input type="checkbox" class="book-check" data-code="${code}" ${this.state.selectedCodes.has(b.bookCode) ? 'checked' : ''}></td>
+              <td class="p-3 font-mono font-bold">${code}</td>
+              <td class="p-3 font-medium">${this.esc(b.title)}</td>
+              <td class="p-3 text-gray-500 text-xs">${this.esc(b.author)}</td>
+              <td class="p-3"><span class="${badge[b.status] || 'bg-gray-200 text-gray-700'} px-2 py-1 rounded text-xs">${this.esc(b.status)}</span>${b.borrower ? `<div class="text-xs text-gray-500 mt-1">${this.esc(b.borrower)}</div>` : ''}</td>
+              <td class="p-3 text-xs text-gray-500">${b.dueDate || '-'}</td>
+              <td class="p-3">
+                <select class="status-select text-xs border rounded p-1" data-code="${code}">
+                  <option value="">상태 변경</option>${options}
+                </select>
+              </td>
+            </tr>`;
+        }).join('');
+        tbody.querySelectorAll('.book-check').forEach(cb => cb.onchange = () => {
+          if (cb.checked) this.state.selectedCodes.add(cb.dataset.code); else this.state.selectedCodes.delete(cb.dataset.code);
+          this.updateSelectionUI();
+        });
+        tbody.querySelectorAll('.status-select').forEach(sel => sel.onchange = () => {
+          if (sel.value) this.changeBookStatus(sel.dataset.code, sel.value);
+          sel.value = '';
+        });
+        this.updateSelectionUI();
+      },
+
+      filterAdminBooks: function() {
+        const q = document.getElementById('admin-book-search').value.toLowerCase();
+        this.renderAdminBooks(this.state.adminData.books.filter(b =>
+          b.bookCode.toLowerCase().includes(q) || b.title.toLowerCase().includes(q) || (b.borrower || '').toLowerCase().includes(q)));
+      },
+
+      changeBookStatus: function(code, status) {
+        const msg = status === '대출가능'
+          ? `${code} 책을 대출가능 상태로 바꿀까요?\n(대출 중이었다면 선생님이 반납 처리한 것으로 기록됩니다)`
+          : `${code} 책을 '${status}' 처리할까요?\n학생 검색과 전체 도서 수에서 빠집니다.`;
+        if (!confirm(msg)) return;
+        this.showLoading(true, true);
+        this.callAdmin('setBookStatus', code, status)
+          .then(res => {
+            this.showToast(res.message, !res.success);
+            this.loadAdminBooks();
+          })
+          .catch(err => { this.showLoading(false, true); if (err.message !== 'auth') this.showToast('상태 변경 중 오류가 발생했습니다.', true); });
+      },
+
+      updateSelectionUI: function() {
+        const n = this.state.selectedCodes.size;
+        document.getElementById('print-selected-btn').innerHTML = `<i class="fa-solid fa-print mr-1"></i>선택한 책 라벨 인쇄 (${n})`;
+        const visible = this.state.adminData.filteredBooks || [];
+        const all = document.getElementById('select-all-books');
+        all.checked = visible.length > 0 && visible.every(b => this.state.selectedCodes.has(b.bookCode));
+      },
+
+      toggleSelectAll: function(checked) {
+        (this.state.adminData.filteredBooks || []).forEach(b => {
+          if (checked) this.state.selectedCodes.add(b.bookCode); else this.state.selectedCodes.delete(b.bookCode);
+        });
+        this.filterAdminBooks();
+      },
+
+      selectRecentCodes: function() {
+        if (!this.state.recentCodes.length) return this.showToast('이번에 등록한 책이 아직 없습니다.', true);
+        this.state.selectedCodes = new Set(this.state.recentCodes);
+        this.filterAdminBooks();
+        this.showToast(`방금 등록한 ${this.state.recentCodes.length}권을 선택했습니다.`);
+      },
+
+      clearSelection: function() {
+        this.state.selectedCodes.clear();
+        this.filterAdminBooks();
+      },
+
+      compareCodes: function(a, b) {
+        const [ab, an] = a.split('-'), [bb, bn] = b.split('-');
+        return ab === bb ? Number(an) - Number(bn) : ab.localeCompare(bb);
+      },
+
+      printSelected: function() {
+        const codes = Array.from(this.state.selectedCodes).sort(this.compareCodes);
+        if (!codes.length) return this.showToast('인쇄할 책을 먼저 체크하세요.', true);
+        if (typeof qrcode === 'undefined') return this.showToast('QR 도구를 불러오지 못했습니다. 인터넷 연결을 확인하고 새로고침해 주세요.', true);
+        const pageUrl = location.origin + location.pathname;
+        const titles = {};
+        this.state.adminData.books.forEach(b => titles[b.bookCode] = b.title);
+        const foot = this.state.libraryName;
+        const area = document.getElementById('print-area');
+        area.classList.toggle('print-guides', document.getElementById('print-guides').checked);
+        area.innerHTML = codes.map(code => {
+          const qr = qrcode(0, 'M');
+          qr.addData(pageUrl + '?book=' + encodeURIComponent(code));
+          qr.make();
+          return `
+            <div class="label">
+              <div class="label-qr">${qr.createSvgTag({ cellSize: 2, margin: 0, scalable: true })}</div>
+              <div class="label-text">
+                <div class="label-title">${this.esc(titles[code] || '')}</div>
+                <div class="label-code">${this.esc(code)}</div>
+                <div class="label-foot">${this.esc(foot)}</div>
+              </div>
+            </div>`;
+        }).join('');
+        setTimeout(() => window.print(), 300);
+      },
+
+      // ── 학생 관리 ──
+      loadAdminStudents: function() {
+        this.showLoading(true, true);
+        this.callAdmin('getClasses')
+          .then(res => {
+            this.state.adminData.classes = res.classes || [];
+            this.state.adminData.currentClassId = res.currentId || '';
+            const usable = this.state.adminData.classes;
+            if (!this.state.adminData.selectedStudentClassId ||
+                !usable.some(c => c['학급ID'] === this.state.adminData.selectedStudentClassId)) {
+              this.state.adminData.selectedStudentClassId = res.currentId || (usable[0] && usable[0]['학급ID']) || '';
+            }
+            const select = document.getElementById('student-class-select');
+            select.innerHTML = '';
+            if (usable.length === 0) {
+              select.innerHTML = '<option value="">먼저 학급을 만들어주세요</option>';
+              document.getElementById('admin-student-list').innerHTML = '<div class="text-center py-8 text-gray-500">학급 관리에서 학급을 먼저 만들어주세요.</div>';
+              this.showLoading(false, true);
+              return;
+            }
+            usable.forEach(c => {
+              const option = document.createElement('option');
+              option.value = c['학급ID'];
+              option.textContent = `${c['학년도']}학년도 ${c['학년']}학년 ${c['반']}반${c['학급이름'] ? ' (' + c['학급이름'] + ')' : ''}${c['상태'] === '보관' ? ' · 보관' : ''}${c['학급ID'] === res.currentId ? ' · 현재 공개' : ''}`;
+              select.appendChild(option);
+            });
+            select.value = this.state.adminData.selectedStudentClassId;
+            return this.fetchStudentsForSelectedClass();
+          })
+          .catch(err => { this.showLoading(false, true); if (err.message !== 'auth') this.showToast('학급과 학생 목록을 불러오지 못했습니다.', true); });
+      },
+
+      changeAdminStudentClass: function() {
+        this.state.adminData.selectedStudentClassId = document.getElementById('student-class-select').value;
+        this.fetchStudentsForSelectedClass();
+      },
+
+      fetchStudentsForSelectedClass: function() {
+        const classId = this.state.adminData.selectedStudentClassId;
+        if (!classId) { this.showLoading(false, true); return Promise.resolve(); }
+        this.showLoading(true, true);
+        return this.callAdmin('getAdminStudents', classId)
+          .then(students => {
+            this.state.adminData.students = students || [];
+            const selectedClass = this.state.adminData.classes.find(c => c['학급ID'] === classId);
+            document.getElementById('student-list-title').textContent = selectedClass
+              ? `${selectedClass['학년도']}학년도 ${selectedClass['학년']}학년 ${selectedClass['반']}반 학생 명단 (${students.length}명)`
+              : '학생 명단';
+            this.renderAdminStudents(students);
+          })
+          .catch(err => { if (err.message !== 'auth') this.showToast('학생 목록을 불러오지 못했습니다.', true); })
+          .finally(() => this.showLoading(false, true));
+      },
+
+      renderAdminStudents: function(students) {
+        const container = document.getElementById('admin-student-list');
+        container.innerHTML = '';
+        if (!students.length) {
+          container.innerHTML = '<div class="text-center py-8 text-gray-500 border rounded-xl">이 학급에 등록된 학생이 없습니다.</div>';
+          return;
+        }
+        students.forEach(s => {
+          const hidden = s['상태'] === '숨김';
+          const row = document.createElement('div');
+          row.className = `border rounded-xl p-3 flex flex-wrap items-center gap-3 ${hidden ? 'bg-gray-100 opacity-75' : 'bg-white shadow-sm'}`;
+          row.innerHTML = `
+            <div class="${hidden ? 'bg-gray-300' : 'bg-indigo-100 text-indigo-700'} rounded-full w-10 h-10 flex items-center justify-center font-black flex-shrink-0">${this.esc(s['학생번호'])}</div>
+            <div class="min-w-[110px] flex-1">
+              <div class="font-bold text-gray-800">${this.esc(s['학생이름'])}</div>
+              <div class="text-xs ${hidden ? 'text-gray-500' : 'text-green-600'}">${hidden ? '학생 화면에서 숨김' : '학생 화면에 공개 중'}</div>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <button class="edit-btn text-xs bg-blue-100 text-blue-700 px-3 py-2 rounded-lg font-bold">수정·학급 이동</button>
+              <button class="toggle-btn text-xs ${hidden ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'} px-3 py-2 rounded-lg font-bold">${hidden ? '다시 공개' : '숨기기'}</button>
+              <button class="delete-btn text-xs bg-red-50 text-red-600 px-3 py-2 rounded-lg font-bold">삭제</button>
+            </div>`;
+          row.querySelector('.edit-btn').onclick = () => this.editStudent(s);
+          row.querySelector('.toggle-btn').onclick = () => this.toggleStudent(s['학생ID']);
+          row.querySelector('.delete-btn').onclick = () => this.removeStudent(s);
+          container.appendChild(row);
+        });
+      },
+
+      afterStudentChange: function(res) {
+        this.showToast(res.message, !res.success);
+        this.init();
+        return this.fetchStudentsForSelectedClass();
+      },
+
+      studentError: function(text) {
+        return err => { this.showLoading(false, true); if (err.message !== 'auth') this.showToast(text, true); };
+      },
+
+      addOneStudent: function() {
+        const classId = this.state.adminData.selectedStudentClassId;
+        const number = document.getElementById('single-student-number').value;
+        const name = document.getElementById('single-student-name').value.trim();
+        if (!classId) return this.showToast('학급을 먼저 선택하세요.', true);
+        if (!number || !name) return this.showToast('번호와 이름을 입력하세요.', true);
+        this.showLoading(true, true);
+        this.callAdmin('addStudent', classId, number, name).then(res => {
+          if (res.success) {
+            document.getElementById('single-student-number').value = '';
+            document.getElementById('single-student-name').value = '';
+          }
+          return this.afterStudentChange(res);
+        }).catch(this.studentError('학생 등록 중 오류가 발생했습니다.'));
+      },
+
+      bulkAddStudents: function() {
+        const classId = this.state.adminData.selectedStudentClassId;
+        const text = document.getElementById('bulk-student-data').value;
+        if (!classId) return this.showToast('학급을 먼저 선택하세요.', true);
+        if (!text.trim()) return this.showToast('학생 명단을 입력하세요.', true);
+        this.showLoading(true, true);
+        this.callAdmin('bulkAddStudents', classId, text).then(res => {
+          if (res.success) document.getElementById('bulk-student-data').value = '';
+          return this.afterStudentChange(res);
+        }).catch(this.studentError('일괄 등록 중 오류가 발생했습니다.'));
+      },
+
+      editStudent: function(student) {
+        const number = prompt('학생 번호를 입력하세요.', student['학생번호']);
+        if (number === null) return;
+        const name = prompt('학생 이름을 입력하세요.', student['학생이름']);
+        if (name === null) return;
+        const classChoices = this.state.adminData.classes.map((c, i) =>
+          `${i + 1}. ${c['학년도']}학년도 ${c['학년']}학년 ${c['반']}반${c['학급이름'] ? ' (' + c['학급이름'] + ')' : ''}`).join('\n');
+        const currentIndex = Math.max(0, this.state.adminData.classes.findIndex(c => c['학급ID'] === student['학급ID']));
+        const choice = prompt('소속 학급 번호를 선택하세요.\n' + classChoices, String(currentIndex + 1));
+        if (choice === null) return;
+        const target = this.state.adminData.classes[Number(choice) - 1];
+        if (!target) return this.showToast('올바른 학급 번호를 선택하세요.', true);
+        this.showLoading(true, true);
+        this.callAdmin('updateStudent', student['학생ID'], target['학급ID'], number, name.trim())
+          .then(res => this.afterStudentChange(res))
+          .catch(this.studentError('학생 수정 중 오류가 발생했습니다.'));
+      },
+
+      toggleStudent: function(studentId) {
+        this.showLoading(true, true);
+        this.callAdmin('toggleStudentStatus', studentId)
+          .then(res => this.afterStudentChange(res))
+          .catch(this.studentError('상태 변경 중 오류가 발생했습니다.'));
+      },
+
+      removeStudent: function(student) {
+        if (!confirm(`${student['학생번호']}번 ${student['학생이름']} 학생을 명단에서 삭제할까요?\n과거 대출 기록은 남습니다.`)) return;
+        this.showLoading(true, true);
+        this.callAdmin('deleteStudent', student['학생ID'])
+          .then(res => this.afterStudentChange(res))
+          .catch(this.studentError('학생 삭제 중 오류가 발생했습니다.'));
+      },
+
+      // ── 학급 관리 ──
+      loadAdminClasses: function() {
+        this.showLoading(true, true);
+        this.callAdmin('getClasses')
+          .then(res => {
+            this.state.adminData.classes = res.classes || [];
+            this.state.adminData.currentClassId = res.currentId || '';
+            const tbody = document.getElementById('admin-class-list');
+            if (this.state.adminData.classes.length === 0) {
+              tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center">등록된 학급이 없습니다.</td></tr>';
+              return;
+            }
+            tbody.innerHTML = this.state.adminData.classes.slice().reverse().map(c => {
+              const isCurrent = c['학급ID'] === res.currentId;
+              const archived = c['상태'] === '보관';
+              const statusBadge = archived
+                ? '<span class="bg-gray-300 text-gray-700 px-2 py-1 rounded text-xs font-bold">보관됨</span>'
+                : (isCurrent
+                  ? '<span class="bg-green-500 text-white px-2 py-1 rounded text-xs font-bold">현재 공개 학급</span>'
+                  : '<span class="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs">사용 중</span>');
+              const currentButton = isCurrent ? ''
+                : `<button onclick="app.setAsCurrentClass('${c['학급ID']}')" ${archived ? 'disabled' : ''} class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded font-bold disabled:opacity-40">현재 학급으로 공개</button>`;
+              const archiveButton = `<button onclick="app.toggleClass('${c['학급ID']}')" class="text-xs ${archived ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-700'} px-2 py-1 rounded font-bold">${archived ? '다시 사용' : '보관'}</button>`;
+              const studentsButton = `<button onclick="app.manageClassStudents('${c['학급ID']}')" class="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded font-bold">학생 관리</button>`;
+              return `
+                <tr class="${isCurrent ? 'bg-green-50' : 'hover:bg-gray-50'}">
+                  <td class="p-3">${this.esc(c['학년도'])}</td>
+                  <td class="p-3 font-bold">${this.esc(c['학년'])}학년 ${this.esc(c['반'])}반 <span class="text-xs text-gray-500 font-normal ml-1">${this.esc(c['학급이름'])}</span></td>
+                  <td class="p-3 text-xs"><span class="text-green-700 font-bold">공개 ${c['공개학생수']}명</span><br><span class="text-gray-500">숨김 ${c['숨김학생수']}명</span></td>
+                  <td class="p-3">${statusBadge}</td>
+                  <td class="p-3"><div class="flex flex-wrap gap-2">${studentsButton}${currentButton}${archiveButton}</div></td>
+                </tr>`;
+            }).join('');
+          })
+          .catch(err => { if (err.message !== 'auth') this.showToast('학급 목록을 불러오지 못했습니다.', true); })
+          .finally(() => this.showLoading(false, true));
+      },
+
+      createClass: function() {
+        const year = document.getElementById('class-year').value;
+        const grade = document.getElementById('class-grade').value;
+        const room = document.getElementById('class-room').value;
+        const name = document.getElementById('class-name').value;
+        if (!year || !grade || !room) return this.showToast('학년도, 학년, 반을 정확히 입력하세요.', true);
+        this.showLoading(true, true);
+        this.callAdmin('addClass', year, grade, room, name)
+          .then(res => {
+            if (!res.success) { this.showLoading(false, true); return this.showToast(res.message, true); }
+            this.showToast(res.message);
+            this.loadAdminClasses();
+            this.init();
+            ['class-grade', 'class-room', 'class-name'].forEach(id => document.getElementById(id).value = '');
+          })
+          .catch(err => { this.showLoading(false, true); if (err.message !== 'auth') this.showToast('학급 생성 오류', true); });
+      },
+
+      setAsCurrentClass: function(classId) {
+        this.showLoading(true, true);
+        this.callAdmin('setCurrentClass', classId)
+          .then(res => {
+            if (!res.success) { this.showLoading(false, true); return this.showToast(res.message, true); }
+            this.showToast(res.message);
+            this.loadAdminClasses();
+            this.init();
+          })
+          .catch(() => this.showLoading(false, true));
+      },
+
+      toggleClass: function(classId) {
+        this.showLoading(true, true);
+        this.callAdmin('toggleClassStatus', classId)
+          .then(res => {
+            this.showToast(res.message, !res.success);
+            this.loadAdminClasses();
+            this.init();
+          })
+          .catch(err => { this.showLoading(false, true); if (err.message !== 'auth') this.showToast('학급 상태 변경 중 오류가 발생했습니다.', true); });
+      },
+
+      manageClassStudents: function(classId) {
+        this.state.adminData.selectedStudentClassId = classId;
+        this.showAdminTab('students');
+      }
+    };
+
+    window.onload = () => {
+      document.getElementById('search-results').innerHTML = SEARCH_PLACEHOLDER;
+      app.init().then(() => app.checkScanParam());
+    };
+  </script>
+</body>
+</html>
